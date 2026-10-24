@@ -1,8 +1,13 @@
 "use client";
+import { RecordDeletionMenu } from "@/components/ops/record-deletion-menu";
 
 import { OpsDetailSection } from "@/components/ops/ops-detail-section";
 import { CanonicalLinkedRecords } from "@/components/ops/ops-linked-records";
 
+import { OpsEmptyState } from "@/components/ops/ops-empty-state";
+import { OpsListingLayout, OPS_LISTING_TABLE } from "@/components/ops/ops-listing";
+import { useListingFilter } from "@/lib/navigation/use-listing-filter";
+import { useUrlState } from "@/lib/navigation/use-url-state";
 import { newestCreatedFirst } from "@/lib/records/record-order";
 
 
@@ -10,7 +15,7 @@ import { withBusinessRecordCreation } from "@/lib/records/module-records";
 
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import Image from "next/image";
-import Link from "next/link";
+import Link from "@/components/ops/ops-record-link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, CalendarDays, Camera, Check, CheckCircle2, Circle, ChevronDown, Eye, FileText, Flag, Link2, LockKeyhole, Package, Plus, Printer, QrCode as QrCodeIcon, Search, Trash2, Upload, UserRound } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
@@ -34,11 +39,11 @@ import { useOrganizationConfiguration } from "@/lib/organization-store";
 import { useCurrentUser } from "@/lib/current-user";
 import { ACTION_STATUS_CONFIG, getActionDueLabel } from "@/lib/actions/action-config";
 import { canEditActionContent, canReviewAction, useActionStore } from "@/lib/actions/action-store";
-import { amendRedTagDecision, canAmendRedTagDecision, clearRedTagHandlingMode, completeRedTagDisposition, confirmRedTagKeep, createAndSubmitRedTagV2, linkRedTagAction, markTagPrinted, reconcileRedTagActions, recordRedTagDecision, startRedTagDisposition, submitRedTagForReview, updateFurtherEvaluationDecision, useRedTags } from "./store";
+import { amendRedTagDecision, canAmendRedTagDecision, clearRedTagHandlingMode, completeRedTagDisposition, confirmRedTagKeep, createAndSubmitRedTagV2, createRedTagV2, linkRedTagAction, markTagPrinted, reconcileRedTagActions, recordRedTagDecision, startRedTagDisposition, submitRedTagForReview, updateFurtherEvaluationDecision, useRedTags } from "./store";
 import { getRedTagIdentificationEvidence, getRedTagReasonCategoryDisplay, getRedTagReasonDisplay, RED_TAG_DECISION_LABELS, RED_TAG_DECISIONS, RED_TAG_REASON_GROUPS, RED_TAG_REASONS, RED_TAG_SECTIONS, type RedTag, type RedTagDecision, type RedTagEvidence, type RedTagReason, type RedTagReasonCategory, type RedTagStatus } from "./types";
 import { useI18n } from "@/components/preferences/use-i18n";
 import { MAX_EVIDENCE_IMAGES, validateEvidenceSelection, optimizeEvidenceImage } from "@/lib/evidence-images";
-import { RED_TAG_OWN_ZONE_MESSAGE, isRedTagOwnLeaderZone, canCreateRedTag, canManageRedTag, canCreateRedTagInZone, canLinkRedTagAction, canReviewRedTag, getRedTagDepartments, getRedTagZoneLeader } from "./access";
+import { canCreateRedTag, canManageRedTag, canCreateRedTagInZone, canLinkRedTagAction, canReviewRedTag, getRedTagDepartments, getRedTagZoneLeader } from "./access";
 import { getRedTagActionIds, getLinkedRedTagActions, getRedTagTimelineStages, getRedTagActionReworkEvents } from "./workflow";
 import { useActionEvidenceUrl } from "@/lib/actions/use-action-evidence-url";
 import { resolveActionSourceBeforeEvidence } from "@/lib/actions/action-evidence";
@@ -80,7 +85,7 @@ function Summary({ tags }: { tags: RedTag[] }) {
 export function RedTagOverviewPage() {
   const tags = useRedTags(); const router = useRouter();
   const user = useCurrentUser();
-  const adminUser = useAdminUsers().find((item) => item.id === user.id);
+  const adminUser = useAdminUsers(true).find((item) => item.id === user.id);
   const mayCreate = canCreateRedTag(adminUser);
   const organization = useOrganizationConfiguration();
   const [createQrOpen, setCreateQrOpen] = useState(false);
@@ -104,45 +109,48 @@ export function RedTagListPage({ view = "all" }: { view?: "all" | "awaiting-clos
   const { t } = useI18n();
   const tags = useRedTags();
   const currentUser = useCurrentUser();
-  const adminUser = useAdminUsers().find((item) => item.id === currentUser.id);
+  const adminUser = useAdminUsers(true).find((item) => item.id === currentUser.id);
   const mayCreate = canCreateRedTag(adminUser);
-  const [search, setSearch] = useState(""); const [status, setStatus] = useState("All"); const [section, setSection] = useState("All");
-  const [reason, setReason] = useState("All"); const [person, setPerson] = useState("All"); const [date, setDate] = useState("");
+  const [search, setSearch] = useListingFilter<string>("search", ""); const [status, setStatus] = useListingFilter<string>("status", "All"); const [section, setSection] = useListingFilter<string>("section", "All");
+  const [reason, setReason] = useListingFilter<string>("reason", "All"); const [person, setPerson] = useListingFilter<string>("person", "All"); const [date, setDate] = useListingFilter<string>("date", "");
   const people = [...new Set(tags.map((tag) => tag.responsiblePersonName).filter((value): value is string => Boolean(value)))];
-  const scoped = tags.filter((tag) => view === "closed" ? tag.status === "Closed" : view === "awaiting-closure" ? ["Decision Made", "Disposition In Progress", "In Progress", "Awaiting Verification"].includes(tag.status) : true);
+  const listingUrl = useUrlState();
+  const underReview = view === "all" && listingUrl.params.get("tab") === "under-review";
+  const scoped = tags.filter((tag) => view === "closed" ? tag.status === "Closed" : view === "awaiting-closure" ? ["Decision Made", "Disposition In Progress", "In Progress", "Awaiting Verification"].includes(tag.status) : underReview ? ["Open", "Under Review"].includes(tag.status) : true);
   const filtered = newestCreatedFirst(scoped).filter((tag) => {
     const term = search.toLowerCase();
     return (!term || `${tag.tagNumber} ${tag.itemName} ${tag.remarks}`.toLowerCase().includes(term)) &&
-      (status === "All" || getRedTagDisplayStatus(tag) === status) && (section === "All" || tag.section === section) &&
+      ((underReview || view !== "all") || status === "All" || getRedTagDisplayStatus(tag) === status) && (section === "All" || tag.section === section) &&
       (reason === "All" || tag.reason === reason) && (person === "All" || tag.responsiblePersonName === person) &&
       (!date || tag.createdAt?.slice(0, 10) === date);
   });
-  return <PageContainer className="max-w-none">
+  return <OpsListingLayout className={OPS_LISTING_TABLE}>
     <FiveSPageHeader eyebrow="Red Tag" title={view === "closed" ? "Closed" : view === "awaiting-closure" ? "Awaiting Closure" : "Red Tags"} description={view === "closed" ? "Completed Red Tags with retained decision, evidence, and closure history." : view === "awaiting-closure" ? "Reviewed Red Tags waiting for completion, evidence, or a linked Action." : "Identify, review, and close physical workplace items."}
       actions={mayCreate ? <Button onClick={() => router.push("/5s/red/create")}><Plus className="size-4" /> {t("redTag.create")}</Button> : undefined} />
-    <RedTagNav />
+    <RedTagNav counts={{ "red-tag": tags.length, "under-review": tags.filter(tag => ["Open", "Under Review"].includes(tag.status)).length, "awaiting-closure": tags.filter(tag => ["Decision Made", "Disposition In Progress", "In Progress", "Awaiting Verification"].includes(tag.status)).length, closed: tags.filter(tag => tag.status === "Closed").length }} />
     {view === "all" && <Summary tags={tags} />}
     <section className="overflow-hidden rounded-xl border bg-card shadow-sm">
       <div className="grid gap-2 border-b bg-muted/15 p-3 md:grid-cols-3 xl:grid-cols-[minmax(220px,1.5fr)_repeat(5,minmax(130px,1fr))]">
         <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input className="h-11 pl-9 md:h-9" placeholder="Search tags or items..." value={search} onChange={(e) => setSearch(e.target.value)} /></div>
-        <Filter value={status} onChange={setStatus} label="All statuses" options={["Under Review", "Awaiting Closure", "Closed"]} />
+        {view === "all" && !underReview && <Filter value={status} onChange={setStatus} label="All statuses" options={["Under Review", "Awaiting Closure", "Closed"]} />}
         <Filter value={section} onChange={setSection} label="All sections" options={[...RED_TAG_SECTIONS]} />
         <Filter value={reason} onChange={setReason} label="All reasons" options={[...RED_TAG_REASONS, ...Object.values(RED_TAG_REASON_GROUPS).flat()]} />
         <Filter value={person} onChange={setPerson} label="All responsible" options={people} />
         <Input className="h-11 md:h-9" type="date" aria-label="Created date" value={date} onChange={(e) => setDate(e.target.value)} />
       </div>
-      <div className="grid gap-3 p-3 md:hidden">{filtered.map((tag) => <button key={tag.id} onClick={() => router.push(`/5s/red/${tag.id}`)} className="min-w-0 rounded-xl border bg-background p-4 text-left active:bg-muted/40"><div className="flex min-w-0 items-start justify-between gap-3"><div className="min-w-0"><p className="font-mono text-xs font-bold text-red-700 dark:text-red-400">{tag.tagNumber}</p><h2 className="mt-1 break-words font-semibold">{tag.itemName}</h2></div><Badge variant={STATUS_TONE[tag.status]}>{tag.status}</Badge></div><dl className="mt-4 grid grid-cols-2 gap-3 border-t pt-3 text-sm"><div><dt className="text-xs text-muted-foreground">Section</dt><dd className="mt-1 break-words font-medium">{tag.section}</dd></div><div><dt className="text-xs text-muted-foreground">Reason</dt><dd className="mt-1 break-words font-medium">{tag.reason}</dd></div><div><dt className="text-xs text-muted-foreground">Responsible</dt><dd className="mt-1 break-words font-medium">{tag.responsiblePersonName ?? "Not assigned"}</dd></div><div><dt className="text-xs text-muted-foreground">Target</dt><dd className="mt-1 font-medium">{tag.targetDate ? displayDate(tag.targetDate) : "Not set"}</dd></div></dl></button>)}</div>
+      <div className="grid gap-3 p-3 md:hidden">{filtered.map((tag) => <article key={tag.id} className="min-w-0 rounded-xl border bg-background"><button onClick={() => router.push(`/5s/red/${tag.id}`)} className="w-full min-w-0 p-4 text-left active:bg-muted/40"><div className="flex min-w-0 items-start justify-between gap-3"><div className="min-w-0"><p className="font-mono text-xs font-bold text-red-700 dark:text-red-400">{tag.tagNumber}</p><h2 className="mt-1 break-words font-semibold">{tag.itemName}</h2></div><Badge variant={STATUS_TONE[tag.status]}>{tag.status}</Badge></div><dl className="mt-4 grid grid-cols-2 gap-3 border-t pt-3 text-sm"><div><dt className="text-xs text-muted-foreground">Section</dt><dd className="mt-1 break-words font-medium">{tag.section}</dd></div><div><dt className="text-xs text-muted-foreground">Reason</dt><dd className="mt-1 break-words font-medium">{tag.reason}</dd></div><div><dt className="text-xs text-muted-foreground">Responsible</dt><dd className="mt-1 break-words font-medium">{tag.responsiblePersonName ?? "Not assigned"}</dd></div><div><dt className="text-xs text-muted-foreground">Target</dt><dd className="mt-1 font-medium">{tag.targetDate ? displayDate(tag.targetDate) : "Not set"}</dd></div></dl></button><div className="flex justify-end px-3 pb-2"><RecordDeletionMenu module="redTag" recordId={tag.id} /></div></article>)}</div>
       <div className="hidden overflow-x-auto md:block"><table className="w-full min-w-[1180px] text-sm"><thead className="border-b bg-muted/20 text-left text-[11px] uppercase tracking-wide text-muted-foreground"><tr>
         {["Tag ID", "Item / Issue", "Location", "Responsible Person", "Target Date", "Status", "Linked Action", "Actions"].map((h) => <th key={h} className="px-4 py-3 font-semibold">{h}</th>)}
       </tr></thead><tbody>{filtered.map((tag) => <tr key={tag.id} className="border-b last:border-0 hover:bg-muted/20">
         <td className="px-4 py-3 font-mono text-xs font-semibold text-red-700 dark:text-red-400">{tag.tagNumber}</td><td className="px-4 py-3 font-medium">{tag.itemName}</td>
         <td className="px-4 py-3">{tag.zone} · {tag.section}</td><td className="px-4 py-3">{tag.responsiblePersonName ?? "Not assigned"}</td>
         <td className="px-4 py-3 whitespace-nowrap">{tag.targetDate ? displayDate(tag.targetDate) : "Not set"}</td><td className="px-4 py-3"><Badge variant={STATUS_TONE[tag.status]}>{getRedTagDisplayStatus(tag)}</Badge></td>
-        <td className="px-4 py-3 font-mono text-xs">{getRedTagActionIds(tag).join(", ") || "—"}</td><td className="px-4 py-3"><Button size="sm" variant="ghost" onClick={() => router.push(`/5s/red/${tag.id}`)}><Eye className="size-4" /> View</Button></td>
+        <td className="px-4 py-3 font-mono text-xs">{getRedTagActionIds(tag).join(", ") || "—"}</td><td className="px-4 py-3"><Button size="sm" variant="ghost" onClick={() => router.push(`/5s/red/${tag.id}`)}><Eye className="size-4" /> View</Button><RecordDeletionMenu module="redTag" recordId={tag.id} /></td>
       </tr>)}</tbody></table></div>
-      {filtered.length === 0 && <div className="py-14 text-center text-sm text-muted-foreground">No Red Tags match the selected filters.</div>}
+      {(search || status !== "All" || section !== "All" || reason !== "All" || person !== "All" || date) && <Button variant="ghost" onClick={() => { setSearch(""); setStatus("All"); setSection("All"); setReason("All"); setPerson("All"); setDate(""); }}>Clear Filters</Button>}
+      {filtered.length === 0 && <OpsEmptyState title="No Red Tags match this view" description="Try changing the search or filters." />}
     </section>
-  </PageContainer>;
+  </OpsListingLayout>;
 }
 
 function Filter({ value, onChange, label, options }: { value: string; onChange: (v: string) => void; label: string; options: string[] }) {
@@ -152,7 +160,7 @@ function Filter({ value, onChange, label, options }: { value: string; onChange: 
 export function RedTagCreatePage({ plantRef }: { plantRef?: string } = {}) {
   const router = useRouter();
   const currentUser = useCurrentUser();
-  const adminUser = useAdminUsers().find((item) => item.id === currentUser.id);
+  const adminUser = useAdminUsers(true).find((item) => item.id === currentUser.id);
   if (!canCreateRedTag(adminUser)) {
     return <PageContainer><div className="grid min-h-[50vh] place-items-center rounded-xl border border-dashed"><div className="max-w-md text-center"><LockKeyhole className="mx-auto size-9 text-muted-foreground" /><h1 className="mt-3 font-semibold">Red Tag creation unavailable</h1><p className="mt-2 text-sm text-muted-foreground">You do not have permission to create Red Tags.</p><Button className="mt-4" variant="outline" onClick={() => router.push("/5s/red")}>Back to Red Tags</Button></div></div></PageContainer>;
   }
@@ -178,7 +186,7 @@ function RedTagCreateForm({ plantRef }: { plantRef?: string }) {
   const creatingRef = useRef(false);
   const validationTargets = useRef<Record<string, HTMLElement | null>>({});
   const uploadRef = useRef<HTMLInputElement>(null);
-  const configuredUsers = useAdminUsers();
+  const configuredUsers = useAdminUsers(true);
   const creator = configuredUsers.find(item => item.id === user.id);
   const availableZones = organization.zones.filter(candidate => candidate.status === "Active" && candidate.plantId === resolvedPlant?.id && canCreateRedTagInZone(creator, plantName, candidate.name));
   const selectedZone = availableZones.some(item => item.name === zone) ? zone : availableZones[0]?.name ?? "";
@@ -188,7 +196,7 @@ function RedTagCreateForm({ plantRef }: { plantRef?: string }) {
   const effectiveDepartment = department ?? zoneConfig?.department ?? "";
   const validationErrors = {
     item: item.trim() ? "" : "Enter an item name.",
-    zone: zoneConfig && reviewer ? "" : "Select a permitted zone with one active assigned Zone Leader.",
+    zone: zoneConfig ? "" : "Select a permitted zone.",
     department: departments.includes(effectiveDepartment) ? "" : "Select a configured department.",
     remarks: remarks.trim() ? "" : "Describe the item and its current condition.",
     reasonCategory: reasonCategory ? "" : "Select a tagging category.",
@@ -215,7 +223,7 @@ function RedTagCreateForm({ plantRef }: { plantRef?: string }) {
   function submit() {
     if (creatingRef.current || processingPhotosRef.current) return;
     setSubmitAttempted(true);
-    if (invalidFields.length || !reasonCategory || !reason || !zoneConfig || !reviewer || !effectiveDepartment || !imageUrl) {
+    if (invalidFields.length || !reasonCategory || !reason || !zoneConfig || !effectiveDepartment || !imageUrl) {
       const firstKey = invalidFields[0]?.[0];
       const target = firstKey ? validationTargets.current[firstKey] : undefined;
       target?.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "center" });
@@ -223,15 +231,14 @@ function RedTagCreateForm({ plantRef }: { plantRef?: string }) {
       return;
     }
     setCreateError(""); creatingRef.current = true; setCreating(true);
-    window.setTimeout(async () => { try { const tag = await withBusinessRecordCreation(() => createAndSubmitRedTagV2({ plant: plantName, zone: selectedZone, section: effectiveDepartment, department: effectiveDepartment, itemName: item.trim(), reasonCategory, reason, customReason: customReason.trim() || undefined, remarks: remarks.trim(), createdById: user.id, createdByName: user.name, imageUrl, identificationEvidence: photos }, user, { id: reviewer.id, name: reviewer.name })); if (!tag) { setCreateError("Unable to create Red Tag. Check the form and browser storage, then retry."); creatingRef.current = false; setCreating(false); return; } router.push(`/5s/red/${tag.id}`); } catch (error) { setCreateError(error instanceof Error ? error.message : "Unable to create Red Tag."); creatingRef.current = false; setCreating(false); } }, 240);
+    window.setTimeout(async () => { try { const input = { plant: plantName, zone: selectedZone, section: effectiveDepartment, department: effectiveDepartment, itemName: item.trim(), reasonCategory, reason, customReason: customReason.trim() || undefined, remarks: remarks.trim(), createdById: user.id, createdByName: user.name, imageUrl, identificationEvidence: photos }; const tag = await withBusinessRecordCreation(() => reviewer && reviewer.id !== user.id ? createAndSubmitRedTagV2(input, user, { id: reviewer.id, name: reviewer.name }) : createRedTagV2(input, user)); if (!tag) { setCreateError("Unable to create Red Tag. Check the form and browser storage, then retry."); creatingRef.current = false; setCreating(false); return; } router.push(`/5s/red/${tag.id}`); } catch (error) { setCreateError(error instanceof Error ? error.message : "Unable to create Red Tag."); creatingRef.current = false; setCreating(false); } }, 240);
   }
   return <PageContainer className="max-w-none">
     <FiveSPageHeader eyebrow="Red Tags / Create" title="Create Red Tag" description="Identify a physical item and capture the context needed for review."
       leading={<Button variant="ghost" size="icon-sm" aria-label="Back to Red Tags" onClick={() => router.push("/5s/red")}><ArrowLeft className="size-4" /></Button>} />
     <form onSubmit={(e) => { e.preventDefault(); submit(); }} className="grid gap-5">
-      {!availableZones.length && <p role="alert" className="text-sm text-destructive">No permitted Zone has an active authorized reviewer. Contact your administrator to check Zone access and reviewer assignments.</p>}
+      {!availableZones.length && <p role="alert" className="text-sm text-destructive">No active Zone is available for this factory.</p>}
       {createError && <p role="alert" className="text-sm text-destructive">{createError}</p>}
-      {organization.zones.some(candidate => candidate.plantId === resolvedPlant?.id && isRedTagOwnLeaderZone(creator, candidate.id)) && <p className="text-sm text-muted-foreground">{RED_TAG_OWN_ZONE_MESSAGE}</p>}
       <Card><CardContent className="grid gap-4 p-5 sm:grid-cols-2 xl:grid-cols-4">
         <ReadOnly label="Plant" value={plantName} /><Field label="Zone" error={submitAttempted ? validationErrors.zone : undefined}><Select searchLabel="Red Tag Zone" value={selectedZone} onValueChange={(v) => setZone(v ?? user.primaryZone)}><SelectTrigger ref={node => { validationTargets.current.zone = node; }} aria-label="Red Tag Zone"><SelectValue placeholder="Select zone" /></SelectTrigger><SelectContent>{availableZones.map((z) => <SelectItem key={z.name} value={z.name}>{z.name}</SelectItem>)}</SelectContent></Select></Field>
         <Field label="Department *" error={submitAttempted ? validationErrors.department : undefined}><Select searchLabel="Department" value={effectiveDepartment} onValueChange={value => setDepartment(value ?? "")}><SelectTrigger ref={node => { validationTargets.current.department = node; }} aria-label="Department"><SelectValue placeholder="Select department" /></SelectTrigger><SelectContent>{departments.map(value => <SelectItem key={value} value={value}>{value}</SelectItem>)}</SelectContent></Select></Field><ReadOnly label="Tag ID" value="RT-###### (assigned on save)" /><ReadOnly label="Date Identified" value={today} /><ReadOnly label="Identified By" value={user.name} />
@@ -295,7 +302,7 @@ export function RedTagDetailPage({ tagId }: { tagId: string }) {
   const tags = useRedTags();
   const actions = useActionStore();
   const user = useCurrentUser();
-  const adminUsers = useAdminUsers();
+  const adminUsers = useAdminUsers(true);
   const adminUser = adminUsers.find((item) => item.id === user.id);
   const tag = tags.find((item) => item.id === tagId);
   const linkedActions = tag ? getLinkedRedTagActions(tag, actions) : [];
@@ -316,7 +323,7 @@ export function RedTagDetailPage({ tagId }: { tagId: string }) {
   };
   return <PageContainer className="max-w-none"><FiveSPageHeader eyebrow="Red Tags / Details" title={tag.tagNumber} description={`${tag.itemName} · ${tag.section}`}
     leading={<Button variant="ghost" size="icon-sm" aria-label="Back to Red Tags" onClick={() => router.push("/5s/red")}><ArrowLeft className="size-4" /></Button>}
-    actions={<><Button variant="outline" onClick={() => router.push(`/5s/red/${tag.id}/report`)}><FileText className="size-4" />View Report</Button><Button variant="outline" onClick={() => setQrOpen(true)}><QrCodeIcon className="size-4" /> View QR</Button><Button variant="outline" onClick={() => router.push(`/5s/red/${tag.id}/print`)}><Printer className="size-4" /> Print Red Tag</Button></>} />
+    actions={<><RecordDeletionMenu module="redTag" recordId={tag.id} returnTo="/5s/red" /><Button variant="outline" onClick={() => router.push(`/5s/red/${tag.id}/report`)}><FileText className="size-4" />View Report</Button><Button variant="outline" onClick={() => setQrOpen(true)}><QrCodeIcon className="size-4" /> View QR</Button><Button variant="outline" onClick={() => router.push(`/5s/red/${tag.id}/print`)}><Printer className="size-4" /> Print Red Tag</Button></>} />
     <RedTagLifecycleIndicator tag={tag} actions={linkedActions} />
     <div className="grid min-w-0 gap-5 [overflow-wrap:anywhere]">
       <OpsDetailSection title="Item Details" trailing={<Badge variant={STATUS_TONE[tag.status]}>{tag.status}</Badge>}><div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4"><Meta icon={Package} label="Item / Equipment" value={tag.itemName} /><Meta label="Red Tag ID" value={tag.tagNumber} />{tag.quantity !== undefined && <Meta label="Quantity" value={String(tag.quantity)} />}<Meta label="Category" value={tag.category ?? "Not recorded"} /><Meta label="Location" value={`${tag.plant} · ${tag.zone} · ${tag.section}`} /><Meta label="Department" value={tag.department ?? "Not recorded"} /><Meta label="Reason" value={getRedTagReasonDisplay(tag.reason, tag.customReason)} />{tag.estimatedValue !== undefined && <Meta label="Estimated Value" value={new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" }).format(tag.estimatedValue)} />}<Meta icon={CalendarDays} label="Identified Date" value={displayDate(tag.createdAt, true)} /><Meta icon={UserRound} label="Identified By" value={tag.createdByName} /></div><section aria-labelledby="red-tag-item-description" className="grid min-w-0 gap-3 border-t pt-5"><h3 id="red-tag-item-description" className="flex items-center gap-2 text-sm font-semibold"><FileText aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />Item Description</h3><p className={`max-w-prose whitespace-pre-wrap text-sm leading-7 [overflow-wrap:anywhere] ${tag.remarks ? "text-foreground/85" : "italic text-muted-foreground"}`}>{tag.remarks || "No description added."}</p></section></OpsDetailSection>

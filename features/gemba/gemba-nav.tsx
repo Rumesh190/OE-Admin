@@ -5,8 +5,8 @@ import { OpsTabBar } from "@/components/ops/ops-tabs";
 
 const GEMBA_TABS = [
   { id: "overview", label: "Overview", href: "/gemba" },
-  { id: "walks", label: "Gemba Walks", href: "/gemba?tab=walks" },
-  { id: "observations", label: "Observations", href: "/gemba?tab=observations" },
+  { id: "walks", label: "All Walks", href: "/gemba?tab=walks" },
+  { id: "observations", label: "All Observations", href: "/gemba?tab=observations" },
 ];
 
 export function GembaNav() {

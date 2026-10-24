@@ -1,3 +1,4 @@
+import { deletedRecordRef } from "@/lib/records/record-tombstones";
 import type { MyAction } from '@/features/five-s/types/my-actions';
 import type { RedTag } from '@/features/five-s/red-tag/types';
 import type { ContinuousImprovement } from '@/features/five-s/continuous-improvement/types';
@@ -15,6 +16,7 @@ export interface CanonicalRecordSummary {
   title: string;
   status: string;
   href: string;
+  deleted?: boolean;
 }
 export interface LinkedRecordEntry { record: CanonicalRecordSummary; relationship: OpsRelationshipType; }
 export interface IntegrationSnapshot {
@@ -63,13 +65,13 @@ export function canonicalRelationshipEdges(s: IntegrationSnapshot): OpsRelations
       const board=s.vm.boards.find(b=>b.id===(action.visualManagementSource?.boardId??id));
       if(!meeting&&!board) continue;
       from=meeting?{module:'visualManagement',recordId:meeting.boardId,childId:meeting.id}:{module:'visualManagement',recordId:board!.id};
-    } else from={module:source==='redFlag'&&s.redTags.some(t=>t.id===id)?'redTag':source,recordId:id,...(source==='gemba'&&action.sourceObservationId?{childId:action.sourceObservationId}:{})};
+    } else from={module:source==='redFlag'&&(s.redTags.some(t=>t.id===id)||deletedRecordRef({module:'redTag',recordId:id}))?'redTag':source,recordId:id,...(source==='gemba'&&action.sourceObservationId?{childId:action.sourceObservationId}:{})};
     edge(from,{module:'action',recordId:action.id},'action');
   }
   return edges;
 }
 
-/** Both endpoints must resolve in the caller's authorized canonical catalog. Never display saved labels for denied/missing targets. */
+/** Both endpoints must resolve in the caller's authorized canonical catalog. Deleted targets use an anonymous, non-navigable reference; never expose saved labels for denied/missing targets. */
 export function resolveLinkedRecordEntries(current:OpsRecordRef, edges:readonly OpsRelationship[], catalog:readonly CanonicalRecordSummary[]) {
   if(!catalog.some(item=>areRecordRefsEqual(item.ref,current))) return {entries:[] as LinkedRecordEntry[],unavailable:false};
   const seen=new Set<string>(), entries:LinkedRecordEntry[]=[];
@@ -79,7 +81,9 @@ export function resolveLinkedRecordEntries(current:OpsRecordRef, edges:readonly 
     if(!target||areRecordRefsEqual(current,target)) continue;
     const key=getRecordRefKey(target); if(seen.has(key))continue; seen.add(key);
     const record=catalog.find(item=>areRecordRefsEqual(item.ref,target));
-    if(record) entries.push({record,relationship:edge.relationshipType}); else unavailable=true;
+    if(record) entries.push({record,relationship:edge.relationshipType});
+    else if (deletedRecordRef(target)) entries.push({ record: { ref: target, title: target.module === "action" ? "Action deleted" : "Source deleted", status: "Deleted", href: "", deleted: true }, relationship: edge.relationshipType });
+    else unavailable=true;
   }
   return {entries,unavailable};
 }

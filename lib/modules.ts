@@ -16,10 +16,11 @@ export type OperationalModuleId =
   | "redFlag"
   | "redTag"
   | "visualManagement"
+  | "visualImprovement"
   | "gemba";
 
 export type SharedCapabilityId = "actions" | "dashboards" | "reports";
-export type LegacyModuleId = "visualImprovement";
+export type LegacyModuleId = never;
 export type AccessCapabilityId = OperationalModuleId | SharedCapabilityId | LegacyModuleId;
 export type NavigationGroupId = "overview" | "operationalExcellence" | "execution" | "visualize" | "analytics" | "system";
 export type ConceptStage = "observe" | "identify" | "dispose" | "improve" | "sustain" | "execute" | "visualize" | "analyze";
@@ -82,7 +83,7 @@ export const OPERATIONAL_MODULES: readonly OperationalModule[] = [
   },
   {
     id: "continuousImprovement",
-    label: "Continual Improvement",
+    label: "Continuous Improvement",
     route: "/continuous-improvement",
     legacyRoutes: ["/5s/continuous-improvement"],
     description: "Manage structured improvement from idea to realized benefit.",
@@ -107,6 +108,19 @@ export const OPERATIONAL_MODULES: readonly OperationalModule[] = [
     conceptStage: "sustain",
     stageLabel: "Sustain",
     order: 40,
+  },
+  {
+    id: "visualImprovement",
+    label: "Visual Improvement",
+    route: "/visual-improvement",
+    description: "Document visual before-and-after workplace improvements.",
+    icon: Eye,
+    enabled: true,
+    group: "operations",
+    navigationGroup: "visualize",
+    conceptStage: "visualize",
+    stageLabel: "Improve visually",
+    order: 44,
   },
   {
     id: "visualManagement",
@@ -136,17 +150,7 @@ const LEGACY_SHARED_CAPABILITIES: readonly SharedCapability[] = [
 ] as const;
 
 /** Kept outside product-facing registries so historical records and bookmarks remain readable. */
-export const LEGACY_MODULES = [
-  {
-    id: "visualImprovement",
-    label: "Legacy Improvement",
-    route: "/visual-improvement",
-    description: "Legacy before-and-after improvement records.",
-    icon: Eye,
-    enabled: true,
-    group: "legacy",
-  },
-] as const;
+export const LEGACY_MODULES = [] as const;
 
 /** Compatibility-only: retained for stored entitlements, old URLs, Actions, and relationships. */
 const LEGACY_OPERATIONAL_MODULES: readonly OperationalModule[] = [{

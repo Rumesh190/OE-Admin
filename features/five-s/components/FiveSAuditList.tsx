@@ -1,5 +1,13 @@
 "use client";
+import { useAccessContext, isLegacyABCOperationalContext } from "@/features/five-s/administration/access-v4-context";
+import { getAuthenticatedDemoActor } from "@/lib/demo-session";
+import { canExecuteScopedAudit, canStartAnyScopedAudit, requiresScopedAuditPolicy } from "@/lib/five-s/audit-authorization";
+import { RecordDeletionMenu } from "@/components/ops/record-deletion-menu";
 
+import { OpsTabBar } from "@/components/ops/ops-tabs";
+import { OPS_LISTING_TABLE } from "@/components/ops/ops-listing";
+import { useListingFilter } from "@/lib/navigation/use-listing-filter";
+import { useUrlState } from "@/lib/navigation/use-url-state";
 import { newestCreatedFirst } from "@/lib/records/record-order";
 
 import { auditScorePercentage } from "@/lib/five-s/scoring-policy";
@@ -20,7 +28,6 @@ import {
   Plus,
   RefreshCcw,
   Search,
-  Trash2,
   X,
 } from "lucide-react";
 
@@ -72,14 +79,7 @@ interface FiveSAuditListProps {
     audit: FiveSAudit
   ) => void;
 
-  onDeleteAudit?: (
-    audit: FiveSAudit
-  ) => void;
 
-  canDeleteAudit?: (audit: FiveSAudit) => boolean;
-
-  /** Optional navigation bar rendered between the page header and content. */
-  nav?: React.ReactNode;
 }
 
 /* =========================================================
@@ -268,17 +268,20 @@ export default function FiveSAuditList({
   onStartAudit,
   onViewAudit,
   onStartScheduledAudit,
-  onDeleteAudit,
-  canDeleteAudit,
-  nav,
 }: FiveSAuditListProps) {
   const router = useRouter();
+  const { context, error: contextError } = useAccessContext();
+  const scopedActor = getAuthenticatedDemoActor()?.user.accessModel === "v3" || Boolean(contextError) || !isLegacyABCOperationalContext(context);
+  const url = useUrlState();
+  const requestedStage = url.params.get("tab");
+  const tabStage = AUDIT_LIFECYCLE_STAGES.find(stage => stage === requestedStage);
   const [restoreOpen, setRestoreOpen] = useState(false);
+  const [restoreError, setRestoreError] = useState("");
   const { locale, t } = useI18n();
   const [
     search,
     setSearch,
-  ] = useState("");
+  ] = useListingFilter<string>("search", "");
 
   /*
    * Keep every Select controlled from
@@ -289,22 +292,22 @@ export default function FiveSAuditList({
   const [
     status,
     setStatus,
-  ] = useState<AuditLifecycleStage | "all">("all");
+  ] = useListingFilter<AuditLifecycleStage | "all">("status", "all");
 
   const [
     plant,
     setPlant,
-  ] = useState<string>("all");
+  ] = useListingFilter<string>("plant", "all");
 
   const [
     department,
     setDepartment,
-  ] = useState<string>("all");
+  ] = useListingFilter<string>("department", "all");
 
   const [
     dateRange,
     setDateRange,
-  ] = useState<DateRange>("all");
+  ] = useListingFilter<DateRange>("dateRange", "all");
 
   /* =========================================================
      UNIQUE PLANTS
@@ -377,8 +380,7 @@ export default function FiveSAuditList({
               .includes(query);
 
           const matchesStatus =
-            status === "all" ||
-            getAuditLifecycleStage(audit) === status;
+            (tabStage ? (audit.status === "Draft" ? "Draft" : getAuditLifecycleStage(audit)) === tabStage : status === "all" || (audit.status === "Draft" ? "Draft" : getAuditLifecycleStage(audit)) === status);
 
           const matchesPlant =
             plant === "all" ||
@@ -411,6 +413,7 @@ export default function FiveSAuditList({
       plant,
       department,
       dateRange,
+      tabStage,
     ]);
 
   /* =========================================================
@@ -449,15 +452,6 @@ export default function FiveSAuditList({
   /* =========================================================
      DELETE
      ========================================================= */
-
-  function handleDelete(
-    event: MouseEvent<HTMLButtonElement>,
-    audit: FiveSAudit
-  ) {
-    event.stopPropagation();
-
-    onDeleteAudit?.(audit);
-  }
 
   /* =========================================================
      VIEW
@@ -502,8 +496,8 @@ export default function FiveSAuditList({
      ========================================================= */
 
   return (
-    <div className="grid gap-4">
-      <OpsConfirmDialog open={restoreOpen} onOpenChange={setRestoreOpen} title="Restore demo audits?" description="This will replace the current 5S audit list with original demo audits." confirmLabel="Restore demo audits" destructive onConfirm={() => { resetFiveSAudits(); setRestoreOpen(false); }} />
+    <div className={`grid min-w-0 gap-4 ${OPS_LISTING_TABLE}`}>
+      <OpsConfirmDialog open={restoreOpen} onOpenChange={setRestoreOpen} title="Restore demo audits?" description="This will replace the current 5S audit list with original demo audits." confirmLabel="Restore demo audits" destructive error={restoreError} onConfirm={() => { try { resetFiveSAudits(); setRestoreError(""); setRestoreOpen(false); } catch (e) { setRestoreError(e instanceof Error ? e.message : "Unable to restore demo audits."); } }} />
       {/* =====================================================
           PAGE HEADER
           ===================================================== */}
@@ -523,6 +517,7 @@ export default function FiveSAuditList({
             onClick={
               handleRestoreDemoData
             }
+            disabled={scopedActor}
             aria-label="Restore demo data"
             title="Restore demo data"
             className="text-muted-foreground"
@@ -534,6 +529,7 @@ export default function FiveSAuditList({
 
           <Button
             type="button"
+            disabled={scopedActor && !canStartAnyScopedAudit()}
             onClick={
               onStartAudit
             }
@@ -544,7 +540,8 @@ export default function FiveSAuditList({
           </Button>
           </>
         }
-      >
+      />
+      <OpsTabBar label="Audit views" active={tabStage ?? "all"} onChange={id => { url.update({ tab: id }, "push"); setStatus("all"); }} tabs={[{ id: "all", label: "All", count: audits.length }, ...AUDIT_LIFECYCLE_STAGES.map(stage => ({ id: stage, label: stage, count: audits.filter(audit => (audit.status === "Draft" ? "Draft" : getAuditLifecycleStage(audit)) === stage).length })), ...(!scopedActor ? [{ id: "settings", label: "Settings", href: "/audits/settings" }] : [])]} />
 
       {/* =====================================================
           SEARCH
@@ -552,7 +549,7 @@ export default function FiveSAuditList({
 
       <div className="flex w-full min-w-0 flex-col gap-2 xl:flex-row xl:items-center">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          <InputGroup className="w-full sm:w-[360px] lg:w-[420px]">
+          <InputGroup className="w-full sm:w-[280px] lg:w-[320px]">
             <InputGroupAddon>
               <Search className="size-4" />
             </InputGroupAddon>
@@ -593,7 +590,8 @@ export default function FiveSAuditList({
         {/* STATUS */}
 
         <Select
-          value={status}
+          value={tabStage ?? status}
+          disabled={Boolean(tabStage)}
           onValueChange={(
             value
           ) => {
@@ -797,9 +795,7 @@ export default function FiveSAuditList({
         </Select>
         </div>
       </div>
-      </FiveSPageHeader>
 
-      {nav}
 
       {/* =====================================================
           TABLE
@@ -808,10 +804,11 @@ export default function FiveSAuditList({
       <div className="grid gap-3 md:hidden">
         {filteredAudits.map((audit) => {
           const score = auditScorePercentage(audit);
+          const canOperate = !requiresScopedAuditPolicy(audit) || canExecuteScopedAudit(audit, undefined, audit.status === "Scheduled" ? "start" : "edit");
           return <article key={audit.id} onClick={() => handleRowClick(audit)} className="min-w-0 rounded-xl border bg-card p-4 shadow-sm active:bg-muted/40">
-            <div className="flex min-w-0 items-start justify-between gap-3"><div className="min-w-0 flex-1"><h2 className="break-words text-base font-semibold leading-6">{audit.title}</h2><p className="mt-1 break-words text-sm text-muted-foreground">{audit.area} · {audit.plant}</p></div><Badge variant={getLifecycleStatusVariant(getAuditLifecycleStage(audit))}>{getAuditLifecycleStage(audit)}</Badge></div>
+            <div className="flex min-w-0 items-start justify-between gap-3"><div className="min-w-0 flex-1"><h2 className="break-words text-base font-semibold leading-6">{audit.title}</h2><p className="mt-1 break-words text-sm text-muted-foreground">{audit.area} · {audit.plant}</p></div><Badge variant={getLifecycleStatusVariant((audit.status === "Draft" ? "Draft" : getAuditLifecycleStage(audit)))}>{(audit.status === "Draft" ? "Draft" : getAuditLifecycleStage(audit))}</Badge></div>
             <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 border-y py-3 text-sm"><div className="min-w-0"><dt className="text-xs text-muted-foreground">{t("audit.auditor")}</dt><dd className="mt-1 break-words font-medium">{audit.auditor}</dd></div><div><dt className="text-xs text-muted-foreground">{t("audit.score")}</dt><dd className="mt-1 font-semibold">{score}%</dd></div><div><dt className="text-xs text-muted-foreground">{t("common.progress")}</dt><dd className="mt-1 font-medium">{audit.completionPercentage}%</dd></div><div><dt className="text-xs text-muted-foreground">{audit.status === "Scheduled" ? "Scheduled" : t("common.created")}</dt><dd className="mt-1 font-medium">{formatAuditTiming(audit, locale)}</dd></div></dl>
-            <div className="mt-3 grid grid-cols-2 gap-2"><Button variant="outline" onClick={(event) => handleView(event, audit)}><Eye className="size-4" /> {t("common.view")}</Button>{audit.status === "Completed" ? <Button onClick={(event) => handleViewReport(event, audit)}><FileBarChart className="size-4" /> {t("common.report")}</Button> : audit.status === "Scheduled" ? <Button onClick={(event) => handleStartScheduled(event, audit)}><Play className="size-4" />Start Audit</Button> : <Button onClick={(event) => handleView(event, audit)}>{t("common.continue")}</Button>}</div>
+            <div className="mt-3 grid grid-cols-2 gap-2"><RecordDeletionMenu module="audit" recordId={audit.id} /><Button variant="outline" onClick={(event) => handleView(event, audit)}><Eye className="size-4" /> {t("common.view")}</Button>{audit.status === "Completed" ? <Button onClick={(event) => handleViewReport(event, audit)}><FileBarChart className="size-4" /> {t("common.report")}</Button> : canOperate && (audit.status === "Scheduled" ? <Button onClick={(event) => handleStartScheduled(event, audit)}><Play className="size-4" />Start Audit</Button> : <Button onClick={(event) => handleView(event, audit)}>{t("common.continue")}</Button>)}</div>
           </article>;
         })}
       </div>
@@ -879,6 +876,7 @@ export default function FiveSAuditList({
                 {filteredAudits.map(
                   (audit) => {
                     const score = auditScorePercentage(audit);
+                    const canOperate = !requiresScopedAuditPolicy(audit) || canExecuteScopedAudit(audit, undefined, audit.status === "Scheduled" ? "start" : "edit");
 
                     const progress =
                       Math.min(
@@ -1001,8 +999,8 @@ export default function FiveSAuditList({
                         {/* STATUS */}
 
                         <td className="px-4 py-3.5 align-middle">
-                          <Badge variant={getLifecycleStatusVariant(getAuditLifecycleStage(audit))} className="whitespace-nowrap">
-                            {getAuditLifecycleStage(audit)}
+                          <Badge variant={getLifecycleStatusVariant((audit.status === "Draft" ? "Draft" : getAuditLifecycleStage(audit)))} className="whitespace-nowrap">
+                            {(audit.status === "Draft" ? "Draft" : getAuditLifecycleStage(audit))}
                           </Badge>
                         </td>
 
@@ -1036,7 +1034,7 @@ export default function FiveSAuditList({
                               <Eye className="size-4" />
                             </Button>
 
-                            {audit.status === "Scheduled" && onStartScheduledAudit && (
+                            {audit.status === "Scheduled" && canOperate && onStartScheduledAudit && (
                               <Button type="button" variant="ghost" size="icon-sm" aria-label={`Start ${audit.title}`} title="Start Audit" onClick={(event) => handleStartScheduled(event, audit)} className="text-primary hover:text-primary"><Play className="size-4" /></Button>
                             )}
 
@@ -1054,26 +1052,7 @@ export default function FiveSAuditList({
                               </Button>
                             )}
 
-                            {onDeleteAudit && (!canDeleteAudit || canDeleteAudit(audit)) && (
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon-sm"
-                                aria-label={`Delete ${audit.title}`}
-                                title="Delete audit"
-                                onClick={(
-                                  event
-                                ) =>
-                                  handleDelete(
-                                    event,
-                                    audit
-                                  )
-                                }
-                                className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                              >
-                                <Trash2 className="size-4" />
-                              </Button>
-                            )}
+                            <RecordDeletionMenu module="audit" recordId={audit.id} />
                           </div>
                         </td>
                       </tr>

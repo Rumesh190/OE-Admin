@@ -10,6 +10,7 @@
  * - Centralizes module route logic
  */
 
+import { deletedRecordRef } from "@/lib/records/record-tombstones";
 import type { OpsRecordRef } from "./types";
 
 /**
@@ -23,6 +24,7 @@ import type { OpsRecordRef } from "./types";
  * DO NOT invent destinations
  */
 export function resolveRecordRoute(ref: OpsRecordRef): string | null {
+  if (deletedRecordRef(ref)) return null;
   switch (ref.module) {
     case "action":
       // Canonical action route

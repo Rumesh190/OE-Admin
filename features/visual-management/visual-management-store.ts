@@ -1,4 +1,7 @@
 "use client";
+import { requireLegacyOperationalWrite } from "@/lib/legacy-operational-write";
+import { activeOperationalRecords, useRecordDeletions, getRecordTombstone, registerDeletionSource } from "@/lib/records/record-tombstones";
+
 
 import { registerActionCreationSource } from "@/lib/actions/action-source-access";
 
@@ -29,7 +32,8 @@ import type {
   VisualManagementTopic,
 } from "./types";
 
-const STORAGE_KEY = "ops-visual-management-v1";
+export const VISUAL_MANAGEMENT_STORAGE_KEY = "ops-visual-management-v1";
+const STORAGE_KEY = VISUAL_MANAGEMENT_STORAGE_KEY;
 
 const PEOPLE = {
   lakshman: { id: "USR-LAKSHMAN", name: "Lakshman" },
@@ -117,6 +121,7 @@ function load() {
 }
 
 function persist(next: VisualManagementState) {
+  requireLegacyOperationalWrite("visualManagement");
   const previous = state;
   state = next;
   const result = typeof window === "undefined" ? { success: true } : safeSetStorage(STORAGE_KEY, state);
@@ -144,8 +149,9 @@ function configureBoards(current: VisualManagementState, configuration = getVisu
   });
   return { ...current, boards };
 }
-export function useVisualManagementStore() { const current = useSyncExternalStore(subscribe, snapshot, serverSnapshot); const configuration = useVisualManagementConfiguration(); const organization = useOrganizationConfiguration(); const users = useAdminUsers(); return useMemo(() => configureBoards(current, configuration, organization.plants, organization.zones, users), [configuration, current, organization.plants, organization.zones, users]); }
-export function getVisualManagementState() { load(); return configureBoards(state); }
+export function useVisualManagementStore() { const current = useSyncExternalStore(subscribe, snapshot, serverSnapshot); const deleted = useRecordDeletions(); const configuration = useVisualManagementConfiguration(); const organization = useOrganizationConfiguration(); const users = useAdminUsers(); return useMemo(() => activeVmState(configureBoards(current, configuration, organization.plants, organization.zones, users), deleted), [configuration, current, organization.plants, organization.zones, users, deleted]); }
+function getVisualManagementArchive() { load(); return configureBoards(state); }
+export function getVisualManagementState() { return activeVmState(getVisualManagementArchive()); }
 export function getVisualManagementBoard(id: string) { return getVisualManagementState().boards.find((item) => item.id === id); }
 export function getVisualManagementMeeting(id: string) { return getVisualManagementState().meetings.find((item) => item.id === id); }
 
@@ -157,8 +163,8 @@ function uid(prefix: string) {
 export function startVisualManagementMeeting(boardId: string, actor: VisualManagementPerson, scheduled?: { scheduleId: string; occurrenceDate: string; scheduledTime: string; durationMinutes: number; attendees: VisualManagementParticipant[] }, lead?: VisualManagementPerson) {
   if (!canOperateVisualManagementBoard(getVisualManagementBoard(boardId), actor)) return null;
 
-  const current = getVisualManagementState();
-  const active = current.meetings.find((item) => item.boardId === boardId && item.status === "In Progress");
+  const current = getVisualManagementArchive();
+  const active = current.meetings.find((item) => item.boardId === boardId && item.status === "In Progress" && !getRecordTombstone("vmMeeting", item.id));
   if (active) return active;
   if (scheduled && current.meetings.some((item) => item.scheduleId === scheduled.scheduleId && item.occurrenceDate === scheduled.occurrenceDate)) return null;
   const selected = current.boards.find((item) => item.id === boardId);
@@ -191,7 +197,8 @@ export function startVisualManagementMeeting(boardId: string, actor: VisualManag
 function canMutateMeeting(id: string, actor: VisualManagementActor | undefined) { const meeting = getVisualManagementMeeting(id); return Boolean(meeting?.status === "In Progress" && canOperateVisualManagementBoard(getVisualManagementBoard(meeting.boardId), actor)); }
 
 function updateMeeting(id: string, updater: (meeting: VisualManagementMeeting) => VisualManagementMeeting) {
-  const current = getVisualManagementState();
+  if (getRecordTombstone("vmMeeting", id)) return null;
+  const current = getVisualManagementArchive();
   const meeting = current.meetings.find((item) => item.id === id);
   if (!meeting) return null;
   const updated = updater(meeting);
@@ -231,7 +238,7 @@ export function removeMeetingAttendee(meetingId: string, personId: string, actor
 export function updateMeetingKpi(meetingId: string, section: VisualManagementKpiSection, values: Partial<VisualManagementKpiEntry>, actor?: VisualManagementActor) {
   if (!canMutateMeeting(meetingId, actor)) return null;
 
-  const current = getVisualManagementState();
+  const current = getVisualManagementArchive();
   const meeting = current.meetings.find((item) => item.id === meetingId);
   if (!meeting) return null;
   const updated = { ...meeting, kpiEntries: meeting.kpiEntries.map((entry) => entry.section === section ? { ...entry, ...values, section } : entry) };
@@ -247,7 +254,7 @@ export function addMeetingTopic(meetingId: string, input: Pick<VisualManagementT
   if (!canMutateMeeting(meetingId, actor)) return null;
 
   if (!input.title.trim()) return null;
-  const current = getVisualManagementState();
+  const current = getVisualManagementArchive();
   const meeting = current.meetings.find((item) => item.id === meetingId);
   if (!meeting) return null;
   const topic: VisualManagementTopic = { ...input, id: uid("VMT"), meetingId, title: input.title.trim(), description: input.description.trim(), createdBy: actor, createdAt: new Date().toISOString() };
@@ -257,7 +264,7 @@ export function addMeetingTopic(meetingId: string, input: Pick<VisualManagementT
 export function linkTopicFollowUp(topicId: string, type: VisualManagementFollowUpType, linkedId?: string, actor?: VisualManagementActor) {
   const parent = getVisualManagementState().topics.find(item => item.id === topicId); if (!parent || !canMutateMeeting(parent.meetingId, actor)) return null;
 
-  const current = getVisualManagementState();
+  const current = getVisualManagementArchive();
   const topic = current.topics.find((item) => item.id === topicId);
   if (!topic) return null;
   const key = type === "Action" ? "linkedActionId" : type === "Red Flag" ? "linkedRedFlagId" : type === "Continuous Improvement" ? "linkedCIId" : type === "Gemba" ? "linkedGembaId" : undefined;
@@ -272,7 +279,7 @@ export function addMeetingDecision(meetingId: string, decisionText: string, owne
   if (!canMutateMeeting(meetingId, actor)) return null;
 
   if (!decisionText.trim()) return null;
-  const current = getVisualManagementState();
+  const current = getVisualManagementArchive();
   const decision: VisualManagementDecision = { id: uid("VMD"), meetingId, decision: decisionText.trim(), owner, relatedTopicId, linkedActionId, createdAt: new Date().toISOString() };
   const topics = relatedTopicId
     ? current.topics.map((item) => item.id === relatedTopicId && item.meetingId === meetingId ? { ...item, decision: decision.decision } : item)
@@ -290,7 +297,7 @@ export function getEscalationTargets(sourceBoardId: string) {
 export function createMeetingEscalation(topicId: string, targetBoardId: string, reason: string, actor: VisualManagementPerson) {
   const parent = getVisualManagementState().topics.find(item => item.id === topicId); if (!parent || !canMutateMeeting(parent.meetingId, actor)) return null;
 
-  const current = getVisualManagementState();
+  const current = getVisualManagementArchive();
   const topic = current.topics.find((item) => item.id === topicId);
   const meeting = topic ? current.meetings.find((item) => item.id === topic.meetingId) : undefined;
   if (!topic || !meeting || !getEscalationTargets(meeting.boardId).some((item) => item.id === targetBoardId) || !reason.trim()) return null;
@@ -303,7 +310,7 @@ export function createMeetingEscalation(topicId: string, targetBoardId: string, 
 export function escalateExistingEscalation(escalationId: string, targetBoardId: string, actor: VisualManagementPerson) {
   const parent = getVisualManagementState().escalations.find(item => item.id === escalationId); if (!parent || !canOperateVisualManagementBoard(getVisualManagementBoard(parent.targetBoardId), actor)) return null;
 
-  const current = getVisualManagementState();
+  const current = getVisualManagementArchive();
   const existing = current.escalations.find((item) => item.id === escalationId);
   if (!existing || !getEscalationTargets(existing.targetBoardId).some((item) => item.id === targetBoardId)) return null;
   const now = new Date().toISOString();
@@ -327,7 +334,7 @@ export function escalateExistingEscalation(escalationId: string, targetBoardId: 
 export function updateEscalationStatus(id: string, status: VisualManagementEscalationStatus, actor?: VisualManagementActor) {
   const parent = getVisualManagementState().escalations.find(item => item.id === id); if (!parent || !canOperateVisualManagementBoard(getVisualManagementBoard(parent.targetBoardId), actor)) return null;
 
-  const current = getVisualManagementState();
+  const current = getVisualManagementArchive();
   const item = current.escalations.find((entry) => entry.id === id);
   if (!item) return null;
   if (status === "Resolved" && item.actionId && getActionById(item.actionId)?.status !== "Completed") {
@@ -340,7 +347,7 @@ export function updateEscalationStatus(id: string, status: VisualManagementEscal
 export function linkEscalationAction(escalationId: string, actionId: string, actor?: VisualManagementActor) {
   const parent = getVisualManagementState().escalations.find(item => item.id === escalationId); if (!parent || !canOperateVisualManagementBoard(getVisualManagementBoard(parent.targetBoardId), actor)) return null;
 
-  const current = getVisualManagementState();
+  const current = getVisualManagementArchive();
   const escalation = current.escalations.find((item) => item.id === escalationId);
   if (!escalation || !actionId) return null;
   if (escalation.actionId) return escalation.actionId === actionId ? escalation : null;
@@ -413,3 +420,7 @@ registerActionCreationSource("visualManagement", (input, user, identity) => {
   }
   return { record: board, zone: meeting?.zone ?? board?.zone ?? input.area, permitted: Boolean(board && canOperateVisualManagementBoard(board, identity) && (topic || deviation)), alreadyLinked: topic?.linkedActionId ?? deviation?.actionId };
 });
+
+function activeVmState(raw: VisualManagementState, deleted?: ReturnType<typeof useRecordDeletions>): VisualManagementState { return { ...raw, boards: activeOperationalRecords("vmBoard", raw.boards, deleted), meetings: activeOperationalRecords("vmMeeting", raw.meetings, deleted), topics: raw.topics.filter(topic => !getRecordTombstone("vmMeeting", topic.meetingId)), decisions: raw.decisions.filter(item => !getRecordTombstone("vmMeeting", item.meetingId)) }; }
+registerDeletionSource("vmBoard", id => { load(); const item = configureBoards(state).boards.find(item => item.id === id); const meetings = state.meetings.filter(item => item.boardId === id); return item ? { id, title: item.name, boardAccess: { plant: item.plant, zone: item.zone, owner: item.owner, members: item.members }, organizationId: "organizationId" in item && typeof item.organizationId === "string" ? item.organizationId : undefined, plant: item.plant, zone: item.zone, childIds: meetings.map(item => item.id), linkedActionIds: meetings.flatMap(item => item.actionIds) } : undefined; });
+registerDeletionSource("vmMeeting", id => { load(); const item = state.meetings.find(item => item.id === id); const board = configureBoards(state).boards.find(board => board.id === item?.boardId); return item && board ? { id, title: item.boardName ?? board.name, organizationId: "organizationId" in board && typeof board.organizationId === "string" ? board.organizationId : undefined, plant: board.plant, zone: board.zone, parentId: board.id, linkedActionIds: [...item.actionIds, ...state.topics.filter(topic => topic.meetingId === id).flatMap(topic => topic.linkedActionId ? [topic.linkedActionId] : [])] } : undefined; });

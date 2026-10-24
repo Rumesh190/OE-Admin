@@ -1,3 +1,4 @@
+import { seedLegacyDirectoryPerson } from "./helpers/legacy-directory";
 import { authenticateDemoFixture } from "./helpers/demo-session";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { MyAction } from "@/features/five-s/types/my-actions";
@@ -40,7 +41,7 @@ describe("Final generic updater hardening", () => {
   });
   it("retains pre-assignment priority setup for an active Audit creator with actions.create", async () => {
     const { store } = await setup(); const admin = await import("@/features/five-s/administration/store"); const { permissionsForRoles } = await import("@/features/five-s/administration/permissions");
-    const creator = admin.createAdminUser({ employeeId: "FINAL-AUDITOR", name: "Setup Auditor", email: "setup@example.test", plant: "Egmore Plant", status: "Active", roles: ["Auditor"], zoneMemberships: [{ zone: "Zone A", responsibility: "Auditor" }], permissions: permissionsForRoles(["Auditor"]) }, reviewer.id)!;
+    const creator = seedLegacyDirectoryPerson(admin, { employeeId: "FINAL-AUDITOR", name: "Setup Auditor", email: "setup@example.test", plant: "Egmore Plant", status: "Active", roles: ["Auditor"], zoneMemberships: [{ zone: "Zone A", responsibility: "Auditor" }], permissions: permissionsForRoles(["Auditor"]) });
     store.setActions([fixture({ source: "Audit", sourceModule: "audit", status: "Awaiting Assignment", createdByUserId: creator.id, createdByName: creator.name })]);
     expect(store.changeActionPriority("FINAL", creator, "High")?.priority).toBe("High");
     expect(store.changeActionDueDate("FINAL", creator, "2030-10-24", "Delay")).toBeUndefined();

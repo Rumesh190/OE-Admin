@@ -1,4 +1,7 @@
+import { getRecordTombstone, getDeletionRecord } from "@/lib/records/record-tombstones";
 import type { VisualManagementBoard, VisualManagementMeeting } from "./types";
+import { hasPlatformLegacyOperationalAccess } from "@/lib/platform-operational-access";
+import { canCreateDemoModuleRecord } from "@/lib/demo/demo-module-creation";
 
 export interface VisualManagementAccessUser {
   id: string;
@@ -7,7 +10,7 @@ export interface VisualManagementAccessUser {
   isSuperAdmin: boolean;
 }
 
-export function canViewVisualManagementBoard(board: VisualManagementBoard, user: VisualManagementAccessUser, roles: readonly string[] | undefined) {
+export function canViewVisualManagementBoard(board: Pick<VisualManagementBoard, "plant" | "zone" | "owner" | "members">, user: VisualManagementAccessUser, roles: readonly string[] | undefined) {
   if (getAdminUser(user.id)?.status !== "Active") return false;
   if (user.isSuperAdmin || roles?.some((role) => role === "Admin" || role === "Auditor")) return true;
   if (board.owner.id === user.id || board.members.some((member) => member.id === user.id)) return true;
@@ -24,13 +27,12 @@ export function visibleVisualManagementBoards(boards: VisualManagementBoard[], u
 }
 
 export function canViewVisualManagementMeeting(meeting: VisualManagementMeeting, boards: VisualManagementBoard[], user: VisualManagementAccessUser, roles: readonly string[] | undefined) {
-  const board = boards.find((item) => item.id === meeting.boardId);
+  const board = boards.find((item) => item.id === meeting.boardId) ?? (getRecordTombstone("vmBoard", meeting.boardId) ? (getDeletionRecord("vmBoard", meeting.boardId)?.boardAccess ?? getRecordTombstone("vmBoard", meeting.boardId)?.boardAccess) : undefined);
   return Boolean(board && canViewVisualManagementBoard(board, user, roles));
 }
 
 export function visibleVisualManagementMeetings(meetings: VisualManagementMeeting[], boards: VisualManagementBoard[], user: VisualManagementAccessUser, roles: readonly string[] | undefined) {
-  const visibleIds = new Set(visibleVisualManagementBoards(boards, user, roles).map((board) => board.id));
-  return meetings.filter((meeting) => visibleIds.has(meeting.boardId));
+  return meetings.filter(meeting => canViewVisualManagementMeeting(meeting, boards, user, roles));
 }
 
 import { getAdminUser } from "@/features/five-s/administration/store";
@@ -40,7 +42,7 @@ export type VisualManagementActor = { id: string };
 
 export function canManageVisualManagementConfiguration(actor: VisualManagementActor | undefined) {
   const user = actor ? getAdminUser(actor.id) : undefined;
-  return Boolean(user?.status === "Active" && user.permissions.includes("administration.manage_configuration"));
+  return Boolean(hasPlatformLegacyOperationalAccess("visualManagement") || (user?.status === "Active" && user.id !== "USR-OPS-SUPER-ADMIN" && user.accessModel !== "v3" && user.permissions.includes("administration.manage_configuration")));
 }
 
 export function canOperateVisualManagementBoard(board: VisualManagementBoard | VisualManagementBoardConfiguration | undefined, actor: VisualManagementActor | undefined, manage = false) {
@@ -49,6 +51,9 @@ export function canOperateVisualManagementBoard(board: VisualManagementBoard | V
   const configured = "plantId" in board;
   const plant = configured ? getOrganizationPlants().find(item => item.id === board.plantId)?.name : board.plant;
   const zone = configured ? getOrganizationZones().find(item => item.id === board.zoneId)?.name : board.zone;
+  if (user.id === "USR-OPS-SUPER-ADMIN") return hasPlatformLegacyOperationalAccess("visualManagement", plant);
+  if (!manage && canCreateDemoModuleRecord("visualManagement", user.id) && (user.plant === plant || user.plant === "All organizations")) return true;
+  if (user.accessModel === "v3") return false;
   if (user.plant !== plant && user.plant !== "All organizations") return false;
   if (user.roles.includes("Admin")) return true;
   if (user.id === (configured ? board.ownerId : board.owner.id)) return true;

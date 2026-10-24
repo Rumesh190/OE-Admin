@@ -1,4 +1,7 @@
 "use client";
+import { canWriteLegacyOperational, requireLegacyOperationalWrite } from "@/lib/legacy-operational-write";
+import { activeOperationalRecords, useActiveOperationalRecords, getRecordTombstone, registerDeletionSource } from "@/lib/records/record-tombstones";
+
 
 import { registerActionCreationSource } from "@/lib/actions/action-source-access";
 
@@ -50,8 +53,16 @@ function load() {
     }
   } catch { /* retain demo data */ }
 }
+/** Keep the photo once on disk; legacy imageUrl readers receive the same alias on load. */
+export function compactRedTagPhotoAliases(next: readonly RedTag[]): RedTag[] {
+  return next.map(tag => {
+    if (!tag.imageUrl?.startsWith("data:") || tag.imageUrl.length < 1000 || tag.identificationEvidence?.[0]?.url !== tag.imageUrl) return tag;
+    const stored = { ...tag }; delete stored.imageUrl; return stored;
+  });
+}
 function persist(next: RedTag[]) {
-  const result = safeSetStorage(RED_TAG_STORAGE_KEY, next);
+  requireLegacyOperationalWrite("redTag");
+  const result = safeSetStorage(RED_TAG_STORAGE_KEY, compactRedTagPhotoAliases(next));
   if (!result.success) {
     if (typeof window !== "undefined") window.alert(result.reason === "quota" ? STORAGE_FULL_MESSAGE : result.message);
     return false;
@@ -64,9 +75,10 @@ function subscribe(listener: () => void) { load(); listeners.add(listener); retu
 function snapshot() { load(); return tags; }
 function serverSnapshot() { return SERVER_TAGS; }
 
-export function useRedTags() { return useSyncExternalStore(subscribe, snapshot, serverSnapshot); }
-export function getRedTags() { load(); return tags; }
-export function getRedTag(id: string) { load(); return tags.find((item) => item.id === id); }
+export function useRedTags() { return useActiveOperationalRecords("redTag", useSyncExternalStore(subscribe, snapshot, serverSnapshot)); }
+export function getRedTags() { load(); return activeOperationalRecords("redTag", tags); }
+export function getRedTag(id: string) {
+  if (getRecordTombstone("redTag", id)) return undefined; load(); return tags.find((item) => item.id === id); }
 
 export function normalizeRedTagStatus(status: string, tag?: Partial<RedTag>): RedTagStatus {
   if (status === "Resolved") return "Awaiting Verification";
@@ -76,6 +88,7 @@ export function normalizeRedTagStatus(status: string, tag?: Partial<RedTag>): Re
 }
 
 export function normalizeRedTag(tag: RedTag): RedTag {
+  if (!tag.imageUrl && tag.identificationEvidence?.[0]?.url) tag = { ...tag, imageUrl: tag.identificationEvidence[0].url };
   const legacyStatus = String((tag as { status?: string }).status ?? "Open");
   const afterEvidence = tag.afterEvidence?.length ? tag.afterEvidence : tag.dispositionDetails?.evidence?.length ? tag.dispositionDetails.evidence : tag.closure?.evidence ?? [];
   const normalizedStatus = normalizeRedTagStatus(legacyStatus, tag);
@@ -459,10 +472,12 @@ function isActiveActionStatus(status: MyActionStatus) {
 }
 
 export function reconcileRedTagActions(actions: MyAction[]) {
+  if (!canWriteLegacyOperational("redTag")) return false;
   load();
   let changed = false;
   const system = { id: "SYSTEM", name: "OPS" } as DemoUser;
   const next = tags.map(tag => {
+    if (getRecordTombstone("redTag", tag.id)) return tag;
     if (tag.status === "Closed") return tag;
     const linked = getLinkedRedTagActions(tag, actions);
     if (!linked.length) return tag;
@@ -563,3 +578,6 @@ registerActionCreationSource("redTag", (input, user) => {
   const tag = input.sourceId ? getRedTag(input.sourceId) : undefined;
   return { record: tag, zone: tag?.zone, permitted: Boolean(tag && canLinkRedTagAction(tag, user)) };
 });
+
+registerDeletionSource("redTag", id => { load(); const item = tags.find(item => item.id === id); return item ? { id: item.id, title: item.itemName, organizationId: "organizationId" in item && typeof item.organizationId === "string" ? item.organizationId : undefined, plant: item.plant, zone: item.zone, aliases: [item.tagNumber], linkedActionIds: [...(item.actionIds ?? []), ...(item.actionId ? [item.actionId] : [])] } : undefined; });
+export function getRedTagEvidenceArchive() { load(); return tags; }

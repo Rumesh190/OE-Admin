@@ -1,7 +1,10 @@
 "use client";
 
+import { AccessAdministrationPage } from "./access-v3-page";
+import { useAccessV3State } from "./access-v3-state";
+import { canOpenAccessAdministration } from "./access-v3-store";
 import { useMemo, useState } from "react";
-import { Check, Edit3, Eye, Plus, Search, ShieldCheck, UserRoundCheck, UserRoundX, UsersRound } from "lucide-react";
+import { Check, Edit3, Eye, Search, ShieldCheck, UserRoundCheck, UserRoundX, UsersRound } from "lucide-react";
 
 import { PageContainer } from "@/components/layout/page-container";
 import { OpsFeedback } from "@/components/ops/ops-feedback";
@@ -30,7 +33,7 @@ import { ADMIN_ROLES, type AdminRole, type AdminUser, type AdminUserInput, type 
 
 type Feedback = { tone: "success" | "error"; message: string } | null;
 
-export default function AdministrationUsersPage({ settingsMode = false }: { settingsMode?: boolean }) {
+function LegacyAdministrationUsersPage({ settingsMode = false }: { settingsMode?: boolean }) {
   const current = useCurrentUser();
   const users = useAdminUsers();
   const organization = useOrganizationConfiguration();
@@ -53,7 +56,7 @@ export default function AdministrationUsersPage({ settingsMode = false }: { sett
   const [pendingSave, setPendingSave] = useState<AdminUserInput | null>(null);
   const [feedback, setFeedback] = useState<Feedback>(null);
 
-  const filtered = useMemo(() => users.filter((user) => {
+  const filtered = useMemo(() => users.filter((user) => user.accessModel !== "v3").filter((user) => {
     const query = search.trim().toLowerCase();
     return (!query || `${user.name} ${user.employeeId} ${user.email}`.toLowerCase().includes(query))
       && (role === "All" || user.roles.includes(role as AdminRole))
@@ -104,7 +107,7 @@ export default function AdministrationUsersPage({ settingsMode = false }: { sett
   }
 
   return <PageContainer className="max-w-none">
-    <FiveSPageHeader eyebrow={settingsMode ? "" : "Administration"} title={settingsMode ? "Users" : "Users & Access"} description={settingsMode ? "Manage organization users, roles, Plant and Zone assignments." : "Manage users, roles, zones and access to OPS."} actions={canManage ? <Button onClick={() => setEditing("new")}><Plus className="size-4" />Add User</Button> : undefined} />
+    <FiveSPageHeader eyebrow={settingsMode ? "" : "Administration"} title={settingsMode ? "Users" : "Users & Access"} description={settingsMode ? "Manage organization users, roles, Plant and Zone assignments." : "Manage users, roles, zones and access to OPS."}  />
     {feedback && <OpsFeedback tone={feedback.tone} message={feedback.message} />}
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">{summary.map(([label, value]) => <Card key={label} className="shadow-none"><CardContent className="p-4"><p className="text-xs text-muted-foreground">{label}</p><p className="mt-1 text-2xl font-semibold tabular-nums">{value}</p></CardContent></Card>)}</div>
     <Card><CardContent className="grid gap-2 p-3 sm:grid-cols-2 xl:grid-cols-[minmax(240px,1.5fr)_repeat(4,minmax(135px,.55fr))]">
@@ -148,7 +151,7 @@ function UserDetail({ user, onClose }: { user: AdminUser | null; onClose: () => 
   const entitlements = useModuleEntitlements();
   if (!user) return null;
   const permissions = Object.entries({ Audits: "audits.view", Actions: "actions.view", Reports: "reports.view", "Continual Improvement": "ci.view", "Red Flag": "red_tag.view", Administration: "administration.view" }).filter(([, permission]) => user.permissions.includes(permission as never));
-  return <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}><DialogContent className="max-h-[calc(100dvh-1rem)] max-w-2xl overflow-y-auto"><DialogHeader><DialogTitle>{user.name}</DialogTitle><DialogDescription>Profile, assignments, inherited access, and current status.</DialogDescription></DialogHeader><div className="grid gap-5"><DetailSection title="Profile"><DetailGrid rows={[["Email", user.email], ["Employee ID", user.employeeId], ["Roles", user.roles.join(", ")], ["Status", user.status]]} /></DetailSection><DetailSection title="Assignments"><DetailGrid rows={[["Plant", user.plant], ["Zone", user.zoneMemberships.map((item) => item.zone).join(", ") || "Not assigned"], ["Responsibility", user.zoneMemberships.map((item) => item.responsibility).join(", ") || "—"]]} /></DetailSection><DetailSection title="Access"><div className="flex flex-wrap gap-2">{permissions.map(([label]) => <Badge key={label} variant="outline"><Check className="size-3" />{label}</Badge>)}</div></DetailSection><DetailSection title="Module Access"><p className="mb-3 text-xs text-muted-foreground">Inherited from organization. Per-user overrides are not used.</p><div className="grid gap-2 sm:grid-cols-2">{ACCESS_CAPABILITIES.map((capability) => <div key={capability.id} className="flex items-center gap-2 rounded-lg border px-3 py-2"><capability.icon className="size-4 text-muted-foreground" /><span className="flex-1 text-sm font-medium">{capability.label}</span><Badge variant={entitlements[capability.id] ? "success" : "muted"}>{entitlements[capability.id] ? "Enabled" : "Unavailable"}</Badge></div>)}</div></DetailSection></div></DialogContent></Dialog>;
+  return <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}><DialogContent className="max-h-[calc(100dvh-1rem)] max-w-2xl overflow-y-auto"><DialogHeader><DialogTitle>{user.name}</DialogTitle><DialogDescription>Profile, assignments, inherited access, and current status.</DialogDescription></DialogHeader><div className="grid gap-5"><DetailSection title="Profile"><DetailGrid rows={[["Email", user.email], ["Employee ID", user.employeeId], ["Roles", user.roles.join(", ")], ["Status", user.status]]} /></DetailSection><DetailSection title="Assignments"><DetailGrid rows={[["Plant", user.plant], ["Zone", user.zoneMemberships.map((item) => item.zone).join(", ") || "Not assigned"], ["Responsibility", user.zoneMemberships.map((item) => item.responsibility).join(", ") || "—"]]} /></DetailSection><DetailSection title="Access"><div className="flex flex-wrap gap-2">{permissions.map(([label]) => <Badge key={label} variant="outline"><Check className="size-3" />{label}</Badge>)}</div></DetailSection><DetailSection title="Module Access"><p className="mb-3 text-xs text-muted-foreground">Inherited from the selected factory. Per-user overrides are not used.</p><div className="grid gap-2 sm:grid-cols-2">{ACCESS_CAPABILITIES.map((capability) => <div key={capability.id} className="flex items-center gap-2 rounded-lg border px-3 py-2"><capability.icon className="size-4 text-muted-foreground" /><span className="flex-1 text-sm font-medium">{capability.label}</span><Badge variant={entitlements[capability.id] ? "success" : "muted"}>{entitlements[capability.id] ? "Enabled" : "Unavailable"}</Badge></div>)}</div></DetailSection></div></DialogContent></Dialog>;
 }
 
 function UserActions({ user, currentId, canManage, onInspect, onEdit, onToggle }: { user: AdminUser; currentId: string; canManage: boolean; onInspect: (user: AdminUser) => void; onEdit: (user: AdminUser) => void; onToggle: (user: AdminUser) => void }) { return <div className="flex flex-wrap gap-1"><Button size="sm" variant="ghost" onClick={() => onInspect(user)}><Eye className="size-4" />View</Button>{canManage && <Button size="sm" variant="ghost" onClick={() => onEdit(user)}><Edit3 className="size-4" />Edit</Button>}{canManage && user.id !== currentId && <Button size="icon-sm" variant="ghost" onClick={() => onToggle(user)} aria-label={user.status === "Active" ? `Deactivate ${user.name}` : `Activate ${user.name}`}>{user.status === "Active" ? <UserRoundX className="size-4" /> : <UserRoundCheck className="size-4" />}</Button>}</div>; }
@@ -159,3 +162,8 @@ function Help({ children }: { children: React.ReactNode }) { return <span classN
 function Filter({ value, onChange, label, options }: { value: string; onChange: (value: string) => void; label: string; options: string[] }) { return <Select searchLabel={label} value={value} onValueChange={(next) => onChange(next ?? "All")}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="All">{label}</SelectItem>{options.map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}</SelectContent></Select>; }
 function formatDate(value: string) { return new Intl.DateTimeFormat("en-IN", { dateStyle: "medium" }).format(new Date(value)); }
 function toInput(user: AdminUser): AdminUserInput { return { employeeId: user.employeeId, name: user.name, email: user.email, plant: user.plant, status: user.status, roles: [...user.roles], zoneMemberships: user.zoneMemberships.map((item) => ({ ...item })), permissions: [...user.permissions] }; }
+
+export default function AdministrationUsersPage(props: { settingsMode?: boolean }) {
+  useCurrentUser(); useAccessV3State();
+  return canOpenAccessAdministration() ? <AccessAdministrationPage /> : <LegacyAdministrationUsersPage {...props} />;
+}

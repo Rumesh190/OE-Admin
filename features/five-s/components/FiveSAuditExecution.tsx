@@ -1,6 +1,11 @@
 "use client";
+import { AuditCorrectiveActionDialog } from "@/features/actions/audit-corrective-action-dialog";
+import { getActiveAccessContext } from "../administration/access-v4-context";
+import { isV4Audit } from "@/lib/five-s/audit-authorization";
 import { useActionEvidenceUrl } from "@/lib/actions/use-action-evidence-url";
-import { persistAuditEvidence } from "@/lib/five-s/audit-evidence-storage";
+import { isScopedAudit, requireAuditExecution } from "@/lib/five-s/audit-authorization";
+import { getFiveSAuditById } from "@/lib/five-s/audit-store";
+import { persistFiveSAuditEvidence } from "@/lib/five-s/audit-store";
 import { CanonicalLinkedRecords } from "@/components/ops/ops-linked-records";
 
 import { getAuditScoringValues, calculateAuditSectionTotals, complianceResponseForScore, questionComplianceResponse, DEFAULT_AUDIT_SCORING, type AuditScoringValues, type ComplianceResponse } from "@/lib/five-s/scoring-policy";
@@ -316,6 +321,8 @@ function FiveSAuditExecution({
   onBack,
   onComplete,
 }: FiveSAuditExecutionProps) {
+  const creationContext = useRef(getActiveAccessContext()?.selectionId ?? "");
+  const versionedExpected = () => isV4Audit(audit) ? { selectionId: creationContext.current, revision: audit.revision! } : undefined;
   const scoringPolicy = getAuditScoringValues(audit);
   const SCORE_OPTIONS = [scoringPolicy.nonCompliance, scoringPolicy.partialCompliance, scoringPolicy.fullyCompliance];
   const router = useRouter();
@@ -334,7 +341,7 @@ function FiveSAuditExecution({
               (question, questionIndex) => ({
                 ...question,
 
-                ...(question.referenceImage === undefined && question.questionSource !== "custom" && isFiveSCategory(section.category) ? referenceFields(section.category, questionIndex) : {}),
+                ...(!isV4Audit(audit) && question.referenceImage === undefined && question.questionSource !== "custom" && isFiveSCategory(section.category) ? referenceFields(section.category, questionIndex) : {}),
 
                 evidence:
                   question.evidence ?? [],
@@ -687,6 +694,7 @@ function FiveSAuditExecution({
     questionId: string,
     updates: Partial<QuestionState>
   ) {
+    try { const latest = getFiveSAuditById(audit.id); if (!latest) throw new Error("Audit is unavailable."); requireAuditExecution(latest); } catch (e) { setUiError(e instanceof Error ? e.message : "Audit execution denied."); return; }
     if (updates.score !== undefined) updates = { ...updates, complianceResponse: complianceResponseForScore(updates.score, scoringPolicy) };
     setQuestionStates(
       (current) => ({
@@ -827,7 +835,7 @@ function FiveSAuditExecution({
       }
     );
 
-    if (actionId) {
+    if (actionId && !isScopedAudit(audit)) {
       const existingAction = getActionById(actionId);
 
       if (existingAction?.status === "Awaiting Assignment") {
@@ -848,6 +856,7 @@ function FiveSAuditExecution({
   function openActionDialog(
     question: FiveSQuestion
   ) {
+    if (isScopedAudit(audit) && !isV4Audit(audit)) { setUiError("Linked Action creation and assignment for v3 identities awaits D10 approval. Existing Action and completion requirements remain in force."); return; }
     const currentState = questionStates[question.id];
     const existingAction = currentState?.actionId ? getActionById(currentState.actionId) : undefined;
     if (existingAction) {
@@ -866,6 +875,11 @@ function FiveSAuditExecution({
       question
     );
 
+    if (isV4Audit(audit)) {
+      const linkedId = questionStates[question.id]?.actionId;
+      if (linkedId) { router.push(`/actions/${encodeURIComponent(linkedId)}`); return; }
+      if (!saveExecutionUpdate(buildCurrentAudit())) return;
+    }
     setShowActionDialog(true);
   }
 
@@ -874,6 +888,7 @@ function FiveSAuditExecution({
     const state = questionStates[activeActionQuestion.id];
     if (!state) return null;
     if (state.actionId) return null;
+    if (isV4Audit(audit)) return <AuditCorrectiveActionDialog audit={getFiveSAuditById(audit.id) ?? audit} questionId={activeActionQuestion.id} onClose={() => setShowActionDialog(false)} onCreated={action => { updateQuestionState(activeActionQuestion.id, { actionRequired: true, actionId: action.id, responsiblePersonId: action.responsiblePersonId ?? "", assignedTo: action.assignedTo }); setShowActionDialog(false); }}/ >;
     const section = sections.find(item=>item.questions.some(question=>question.id===activeActionQuestion.id));
     const context: LinkedActionContext = {
       source:"Audit",sourceModule: "audit",sourceId: audit.id,sourceTitle: audit.title,sourceObservationId: activeActionQuestion.id,
@@ -1007,10 +1022,8 @@ function FiveSAuditExecution({
       const { dataUrl, size } = await readEvidenceFile(file);
 
       const evidence:
-        FiveSEvidence = await persistAuditEvidence({
-        id: `EV-${Date.now()}-${Math.random()
-          .toString(36)
-          .slice(2, 8)}`,
+        FiveSEvidence = await persistFiveSAuditEvidence(audit.id, {
+        id: createAuditEvidenceId(),
 
         name: file.name,
 
@@ -1031,8 +1044,8 @@ function FiveSAuditExecution({
 
         uploadedBy:
           currentUser.name,
-      });
-      await compactAuditEvidenceStorage();
+      }, versionedExpected());
+      if (!isScopedAudit(audit)) await compactAuditEvidenceStorage();
 
       const nextEvidence = [
         ...current,
@@ -1255,14 +1268,19 @@ function FiveSAuditExecution({
    * ---------------------------------------------------------
    */
 
+  function saveExecutionUpdate(updates: Partial<FiveSAudit>) {
+    try { return updateFiveSAudit(audit.id, updates, currentUser, versionedExpected()); }
+    catch (e) { setUiError(e instanceof Error ? e.message : "Audit could not be saved."); return undefined; }
+  }
   function handleSaveDraft() {
     setSaving(true);
     setDraftSaved(false);
 
     window.setTimeout(() => {
       const status = audit.status === "In Progress" ? "In Progress" : "Draft";
-      updateFiveSAudit(audit.id, buildCurrentAudit({ status }));
+      const saved = saveExecutionUpdate(buildCurrentAudit({ status }));
       setSaving(false);
+      if (!saved) return;
       setDraftSaved(true);
       setHasSavedDraft(true);
       window.setTimeout(() => setDraftSaved(false), 1400);
@@ -1357,8 +1375,8 @@ function FiveSAuditExecution({
 
     const timer = window.setTimeout(() => {
       const status = audit.status === "In Progress" ? "In Progress" : "Draft";
-      updateFiveSAudit(audit.id, buildCurrentAudit({ status }));
-      if (answeredQuestions > 0) setHasSavedDraft(true);
+      const saved = saveExecutionUpdate(buildCurrentAudit({ status }));
+      if (saved && answeredQuestions > 0) setHasSavedDraft(true);
     }, 450);
 
     return () => window.clearTimeout(timer);
@@ -1372,7 +1390,7 @@ function FiveSAuditExecution({
 
     if (audit.status !== "Completed") {
       const reportAudit = buildCurrentAudit();
-      updateFiveSAudit(audit.id, reportAudit);
+      if (!saveExecutionUpdate(reportAudit)) return;
     }
     router.push(`/5s/audits/${encodeURIComponent(audit.id)}/report?from=audit`);
   }
@@ -1380,7 +1398,7 @@ function FiveSAuditExecution({
   function handleCompleteAudit() {
     if (!auditReadyForCompletion || !auditorSignature || !canCompleteFiveSAudit(audit, currentUser)) return;
     const snapshot = buildCurrentAudit();
-    const completedAudit = completeFiveSAudit(audit.id, snapshot.sections, currentUser);
+    const completedAudit = isV4Audit(audit) ? completeFiveSAudit(audit.id, snapshot.sections, currentUser, versionedExpected()) : completeFiveSAudit(audit.id, snapshot.sections, currentUser);
     if (!completedAudit) { setUiError("The Audit could not be completed. Check required answers, evidence, signature and your completion access."); return; }
     onComplete?.(completedAudit);
     setShowCompleteConfirmation(false);
@@ -1393,14 +1411,12 @@ function FiveSAuditExecution({
   }
 
   function handleSignatureConfirm(signatureImage: string) {
-    const signature = { userId: currentUser.id, userName: audit.auditor, signedAt: new Date().toISOString(), signatureImage };
-    setAuditorSignature(signature);
-    updateFiveSAudit(audit.id, buildCurrentAudit({ auditorSignature: signature }));
+    const signature = { userId: currentUser.id, userName: currentUser.name, signedAt: new Date().toISOString(), signatureImage };
+    if (saveExecutionUpdate(buildCurrentAudit({ auditorSignature: signature }))) setAuditorSignature(signature);
   }
 
   function handleSignatureClear() {
-    setAuditorSignature(undefined);
-    updateFiveSAudit(audit.id, buildCurrentAudit({ auditorSignature: undefined }));
+    if (saveExecutionUpdate(buildCurrentAudit({ auditorSignature: undefined }))) setAuditorSignature(undefined);
   }
 
   /**
@@ -1412,7 +1428,8 @@ function FiveSAuditExecution({
   if (showReview) {
     return (
       <div className="flex min-w-0 flex-col md:min-h-[calc(100dvh-7rem)]">
-        {uiError && <OpsFeedback tone="error" message={uiError} />}
+        {isScopedAudit(audit) && !isV4Audit(audit) && <p role="status" className="border-b px-4 py-3 text-sm text-muted-foreground">Linked Action creation for v3 identities awaits D10 approval. Non-compliant findings still require a linked Action before completion.</p>}
+      {uiError && <OpsFeedback tone="error" message={uiError} />}
         <div className="sticky top-14 z-30 min-w-0 border-b bg-background/95 px-0 py-3 backdrop-blur md:top-0 md:px-6 lg:px-8">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex min-w-0 items-center gap-3">
@@ -1729,7 +1746,7 @@ function FiveSAuditExecution({
           open={showCompleteConfirmation}
           questionCount={allQuestions.length}
           outstandingActionCount={openAuditActions.length}
-          auditor={audit.auditor}
+          auditor={isScopedAudit(audit) ? currentUser.name : audit.auditor}
           signature={auditorSignature}
           onOpenChange={setShowCompleteConfirmation}
           onSignatureConfirm={handleSignatureConfirm}
@@ -1866,7 +1883,7 @@ function FiveSAuditExecution({
             <div className="mt-2 flex items-center gap-3 text-[11px] text-muted-foreground"><div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${completionPercentage}%` }} /></div><span>{answeredQuestions}/{allQuestions.length} · {completionPercentage}%</span></div>
           </div>
 
-          <main className="min-w-0 lg:h-full lg:min-h-0">
+          <section aria-label="Audit question workspace" className="min-w-0 lg:h-full lg:min-h-0">
           {activeSection && (
             <Card className="gap-0 overflow-hidden lg:h-full lg:min-h-0">
               {/* REDUCED SECTION HEADER */}
@@ -2225,7 +2242,7 @@ function FiveSAuditExecution({
                                     type="button"
                                     size="sm"
                                     className="self-center"
-                                    disabled={!questionUnlocked}
+                                    disabled={!questionUnlocked || (isScopedAudit(audit) && !isV4Audit(audit))}
                                     variant={requiresAction ? "default" : "outline"}
                                     onClick={() => openActionDialog(question)}
                                   >
@@ -2379,7 +2396,7 @@ function FiveSAuditExecution({
 
             </Card>
           )}
-          </main>
+          </section>
         </div>
       </div>
 
@@ -2583,7 +2600,7 @@ function FiveSAuditExecution({
         open={showCompleteConfirmation}
         questionCount={allQuestions.length}
           outstandingActionCount={openAuditActions.length}
-        auditor={audit.auditor}
+        auditor={isScopedAudit(audit) ? currentUser.name : audit.auditor}
         signature={auditorSignature}
         onOpenChange={setShowCompleteConfirmation}
         onSignatureConfirm={handleSignatureConfirm}
@@ -2594,6 +2611,8 @@ function FiveSAuditExecution({
     </div>
   );
 }
+
+function createAuditEvidenceId() { return `EV-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`; }
 
 export function CompleteAuditDialog({
   error,

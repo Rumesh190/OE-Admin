@@ -1,3 +1,4 @@
+import { ListingDefaultsInitScript } from "@/components/ops/listing-defaults-init-script";
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { PreferencesInitScript } from "@/components/preferences/preferences-init-script";
@@ -29,6 +30,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
+        <ListingDefaultsInitScript />
         <PreferencesInitScript />
         <UiPreferencesProvider><AuthProvider>{children}</AuthProvider></UiPreferencesProvider>
       </body>

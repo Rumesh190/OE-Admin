@@ -8,9 +8,9 @@ const source = (path: string) => readFileSync(resolve(process.cwd(), path), "utf
 
 describe("Change Log 2 Red Tag simplification", () => {
 
-  it("provides the required five-tab Red Tag navigation and coming-soon settings", () => {
+  it("provides the standard Red Tag navigation and coming-soon settings", () => {
     const nav = source("features/five-s/red-tag/red-tag-nav.tsx");
-    for (const label of ["Overview", "Red Tags", "Awaiting Closure", "Closed", "Settings"]) expect(nav).toContain(`label: "${label}"`);
+    for (const label of ["Overview", "All", "Under Review", "Awaiting Closure", "Closed", "Settings"]) expect(nav).toContain(`label: "${label}"`);
     expect(source("app/(app)/5s/red/settings/page.tsx")).toContain("Settings coming soon");
   });
 

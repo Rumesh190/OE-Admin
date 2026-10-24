@@ -1,11 +1,12 @@
 "use client";
+import { RecordDeletionMenu } from "@/components/ops/record-deletion-menu";
 
 import { CanonicalLinkedRecords } from "@/components/ops/ops-linked-records";
 import { useUrlState } from "@/lib/navigation/use-url-state";
 import { ActionLink } from "@/components/ops/ops-return-link";
 
 import { useState } from "react";
-import Link from "next/link";
+import Link from "@/components/ops/ops-record-link";
 import { ArrowLeft, CheckCircle2, FilePenLine, FileText, Link2, PauseCircle, Play, Plus, RotateCcw, Save, Send, XCircle } from "lucide-react";
 import { PageContainer } from "@/components/layout/page-container";
 import { Badge } from "@/components/ui/badge";
@@ -59,7 +60,7 @@ export default function ContinuousImprovementDetailPage({ improvementId, initial
     catch (reason) { setNotice(reason instanceof Error ? reason.message : "Unable to update this improvement."); }
   }
 
-  const headerActions = <>
+  const headerActions = <><RecordDeletionMenu module="continuousImprovement" recordId={item.id} returnTo="/continuous-improvement" />
     {mayEdit && <Button variant="outline" nativeButton={false} render={<Link href={`/continuous-improvement/${encodeURIComponent(item.id)}/edit`} />}><FilePenLine className="size-4" />Edit</Button>}
     {item.status === "approved" && mayImplement && <Button onClick={() => run(() => startImprovement(item.id, currentUser), "Implementation started.", "implementation")}><Play className="size-4" />Start Implementation</Button>}
     {item.status === "submitted" && mayReview && <Button onClick={() => run(() => startImprovementReview(item.id, currentUser), "Review started.", "review")}>Review Proposal</Button>}

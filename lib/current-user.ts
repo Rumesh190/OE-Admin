@@ -1,8 +1,9 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
-import { useAdminUsers } from "@/features/five-s/administration/store";
+import { getAdminUser, useAdminUsers } from "@/features/five-s/administration/store";
 import { usePersonalSettings } from "@/lib/profile-settings";
+import { resolveCanonicalProfileRole, type CanonicalProfileTarget } from "@/lib/demo/canonical-profiles";
 
 export interface DemoUser {
   id: string;
@@ -44,9 +45,9 @@ export const DEMO_USERS = {
   },
   superAdmin: {
     id: "USR-OPS-SUPER-ADMIN",
-    name: "OPS Super Admin",
-    role: "Platform Administrator",
-    initials: "SA",
+    name: "Metric Mind",
+    role: "Platform Super Admin",
+    initials: "MM",
     plant: "All organizations",
     primaryZone: "Platform",
     isSuperAdmin: true,
@@ -58,7 +59,10 @@ export type DemoRole = keyof typeof DEMO_USERS;
 /** Default identity used during server rendering and for the audit workflow. */
 export const CURRENT_USER = DEMO_USERS.auditor;
 
+export const ADMIN_DEMO_SUBJECT_KEY = "ops-administration-demo-person-v1";
 const STORAGE_KEY = "five-s-demo-role";
+let administrationIdentity: DemoUser | undefined;
+let administrationIdentityKey = "";
 const listeners = new Set<() => void>();
 let activeRole: DemoRole = "auditor";
 let storageLoaded = false;
@@ -73,12 +77,34 @@ function loadStoredRole() {
 function subscribe(listener: () => void) {
   loadStoredRole();
   listeners.add(listener);
-  return () => listeners.delete(listener);
+  window.addEventListener("ops-access-context-changed", listener);
+  return () => { listeners.delete(listener); window.removeEventListener("ops-access-context-changed", listener); };
+}
+
+function selectedTarget(): CanonicalProfileTarget | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const value = JSON.parse(window.localStorage.getItem("ops-active-access-context-v1") ?? "null") as CanonicalProfileTarget | null;
+    return value?.kind === "platform" || value?.kind === "client" || value?.kind === "factory" ? value : null;
+  } catch { return null; }
 }
 
 function getSnapshot(): DemoUser {
   loadStoredRole();
-  return DEMO_USERS[activeRole];
+  const selected = typeof window !== "undefined" ? window.localStorage.getItem(ADMIN_DEMO_SUBJECT_KEY) : null;
+  if (selected) {
+    const person = getAdminUser(selected);
+    const role = resolveCanonicalProfileRole(selected, selectedTarget());
+    const key = JSON.stringify([selected, person?.name, person?.status, role]);
+    if (key !== administrationIdentityKey) { administrationIdentityKey = key; administrationIdentity = { id: selected, name: person?.name ?? "Unavailable administration identity", role, initials: "AD", plant: person?.plant ?? "", primaryZone: "", isSuperAdmin: false }; }
+    return administrationIdentity!;
+  }
+  const identity = DEMO_USERS[activeRole];
+  const person = getAdminUser(identity.id);
+  const role = resolveCanonicalProfileRole(identity.id, selectedTarget());
+  const key = JSON.stringify([identity.id, person?.name ?? identity.name, role]);
+  if (key !== administrationIdentityKey) { administrationIdentityKey = key; administrationIdentity = { ...identity, name: person?.name ?? identity.name, role }; }
+  return administrationIdentity;
 }
 
 function getServerSnapshot(): DemoUser {
@@ -86,11 +112,13 @@ function getServerSnapshot(): DemoUser {
 }
 
 export function setDemoRole(role: DemoRole) {
-  if (role === activeRole) return;
+  window.localStorage.removeItem(ADMIN_DEMO_SUBJECT_KEY);
+  window.localStorage.setItem(STORAGE_KEY, role);
   activeRole = role;
   storageLoaded = true;
-  window.localStorage.setItem(STORAGE_KEY, role);
-  listeners.forEach((listener) => listener());
+  window.localStorage.removeItem("ops-active-access-context-v1");
+  notifyDemoIdentityChanged();
+  window.dispatchEvent(new Event("ops-access-context-changed"));
 }
 
 export function getCurrentDemoUser() {
@@ -99,7 +127,7 @@ export function getCurrentDemoUser() {
 
 export function useCurrentUser() {
   const identity = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
-  const configured = useAdminUsers().find((user) => user.id === identity.id);
+  const configured = useAdminUsers(true).find((user) => user.id === identity.id);
   const personal = usePersonalSettings(identity.id);
   const name = personal.profile.fullName || configured?.name || identity.name;
   return {
@@ -110,4 +138,32 @@ export function useCurrentUser() {
     primaryZone: configured?.zoneMemberships[0]?.zone ?? identity.primaryZone,
     photo: personal.profile.photo,
   };
+}
+
+/** Demo identity selection only; commands still resolve and validate the current active directory subject. */
+export function setAdministrationDemoIdentity(userId: string) {
+  stageDemoIdentity(userId);
+  window.localStorage.removeItem("ops-active-access-context-v1");
+  notifyDemoIdentityChanged();
+  window.dispatchEvent(new Event("ops-access-context-changed"));
+}
+
+/** Internal coordination primitive for an identity + access-context transaction. */
+export function stageDemoIdentity(userId: string) {
+  if (userId === DEMO_USERS.superAdmin.id) {
+    window.localStorage.removeItem(ADMIN_DEMO_SUBJECT_KEY);
+    window.localStorage.setItem(STORAGE_KEY, "superAdmin");
+    activeRole = "superAdmin";
+    storageLoaded = true;
+    return;
+  }
+  const person = getAdminUser(userId);
+  if (!person || person.status !== "Active") throw new Error("Select an active administration person.");
+  window.localStorage.setItem(ADMIN_DEMO_SUBJECT_KEY, person.id);
+}
+
+export function notifyDemoIdentityChanged() {
+  storageLoaded = false;
+  administrationIdentityKey = "";
+  listeners.forEach(listener => listener());
 }

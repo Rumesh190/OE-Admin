@@ -1,0 +1,565 @@
+{
+  "origin": "http://localhost:3000",
+  "dataset": "ops-iq-v4-demo-v1",
+  "disposable": true,
+  "productionActivation": false,
+  "wholeKeysCleared": [],
+  "modifiedOrCreatedKeys": [
+    "five-s-administration-users-v1",
+    "five-s-demo-role",
+    "five-s-red-tags-v1",
+    "manufacturing-qms-five-s-audits-v1",
+    "ops-access-v3-administration-v1",
+    "ops-access-v4-administration-v1",
+    "ops-active-access-context-v1",
+    "ops-organization-configuration-v1",
+    "ops-organization-modules-v1",
+    "ops-record-sequence-v1:abc-manufacturing:actions",
+    "ops-record-sequence-v1:abc-manufacturing:audit",
+    "standalone-5s-actions",
+    "standalone-5s-notifications"
+  ],
+  "removedRecords": [
+    {
+      "key": "manufacturing-qms-five-s-audits-v1",
+      "ids": [
+        "5S-EGM-ZB-001",
+        "5S-EGM-ZA-005",
+        "5S-EGM-ZA-004",
+        "5S-EGM-ZA-003",
+        "5S-EGM-ZB-005",
+        "5S-EGM-ZC-005",
+        "5S-EGM-ZD-006",
+        "5S-EGM-ZD-005",
+        "5S-EGM-ZA-006",
+        "5S-AUD-003",
+        "5S-AUD-004"
+      ]
+    },
+    {
+      "key": "standalone-5s-actions",
+      "ids": [
+        "ACT-ZA-001",
+        "ACT-ZB-001",
+        "ACT-ZD-101",
+        "ACT-ZA-102",
+        "ACT-ZD-102",
+        "ACT-ZC-102"
+      ]
+    },
+    {
+      "key": "standalone-5s-notifications",
+      "ids": [
+        "NOT-ACT-ZB-001-ASSIGN",
+        "NOT-ACT-ZA-001-ASSIGNED"
+      ]
+    }
+  ],
+  "compactedPhotoAliases": {
+    "key": "five-s-red-tags-v1",
+    "recordIds": [
+      "RT-000008",
+      "RT-000006",
+      "RT-000005",
+      "RT-000004",
+      "RT-000003",
+      "RT-000002"
+    ],
+    "recordsDeleted": 0,
+    "photosDeleted": 0
+  },
+  "created": {
+    "clientId": "ORG-ecd173de-cb08-49aa-8b1c-cd940ba5d5b7",
+    "factoryId": "PLANT-a7c73ffc-75de-4432-b706-042c95caa979",
+    "people": [
+      {
+        "id": "USR-98deff90-9c82-4151-803a-878ebabdda3d",
+        "name": "Manoj Guru"
+      },
+      {
+        "id": "USR-15455c46-d821-4866-a2b3-73bca540ef2d",
+        "name": "Suresh"
+      },
+      {
+        "id": "USR-a01bf80f-5c17-49ee-9cd9-3eade424dc5e",
+        "name": "Priya Raman"
+      },
+      {
+        "id": "USR-187e1940-4afc-46c5-b55b-6fa26d7a2ed9",
+        "name": "Kavya Iyer"
+      },
+      {
+        "id": "USR-ce3ff8e7-9a8f-451f-8c88-4c04b1674b49",
+        "name": "Meera Nair"
+      },
+      {
+        "id": "USR-6696f0a7-2c64-464f-be3b-64c46f9c0878",
+        "name": "Vikram Das"
+      },
+      {
+        "id": "USR-3359a54b-e59f-4a8f-8dff-9e90746c5e9f",
+        "name": "Neha Patel"
+      }
+    ],
+    "reusedPeople": [
+      "USR-LAKSHMAN",
+      "USR-RUMESH",
+      "USR-SIVA-KUMAR",
+      "USR-ANAND"
+    ],
+    "zones": {
+      "ZA": "ZONE-75d3aa6f-2e4b-4378-a0cd-3618e345f327",
+      "ZB": "ZONE-4d535ca0-aa1e-4a3e-a44d-821360bde58f",
+      "ZC": "ZONE-85c3a710-3545-4cdd-98e4-8b9da158fd40",
+      "ZD": "ZONE-fc84babc-46b6-43f8-82ff-5b0cffd80a6c"
+    },
+    "departments": {
+      "ASM": "DEPT-19ecd35f-71c2-45c0-9b11-0108561a52cd",
+      "QLT": "DEPT-2460b156-61b4-4a62-84d5-891d4392ccd0",
+      "MNT": "DEPT-d633681d-43a7-437f-aef1-cd1ae253ce25",
+      "FIN": "DEPT-71468135-f25e-44f2-91d0-f7772949ff46",
+      "LOG": "DEPT-3cf7bcbc-5050-42b0-8656-4db651b64676"
+    },
+    "assignments": {
+      "rumesh:Zone Leader": "ROLE-ee1d2f76-6606-45d0-8cad-9dc9ef49d927",
+      "kavya:Zone Leader": "ROLE-2ec0dd91-710d-49d3-bb3d-ce7344d71020",
+      "priya:ASM": "ROLE-f70b85cb-1d34-4cf4-8907-77f383b04d83",
+      "priya:QLT": "ROLE-3d4c6d16-c588-40eb-b4bf-39de8f40e196",
+      "neha:LOG": "ROLE-eabae40c-61a3-4815-bfe3-ee80feaf8ce0",
+      "suresh:ASM": "ROLE-489ce8ae-7821-421e-bd17-2acdb819a20e",
+      "siva:QLT": "ROLE-9321dcc4-79fd-4872-b2e6-0319221de2f7",
+      "anand:LOG": "ROLE-a554c418-3b2d-4721-bce7-debe9b84875a",
+      "vikram:Zone Champion": "ROLE-8918713b-59ff-4744-9f43-5e3919765c1f"
+    },
+    "auditIds": [
+      "AUD-000003",
+      "AUD-000004"
+    ],
+    "actionIds": [
+      "ACT-000009",
+      "ACT-000010",
+      "ACT-000011"
+    ],
+    "clientMemberships": [
+      {
+        "id": "CM-16c9133f-65c1-41de-b147-cdcffaeef96a",
+        "userId": "USR-98deff90-9c82-4151-803a-878ebabdda3d",
+        "organizationId": "ORG-ecd173de-cb08-49aa-8b1c-cd940ba5d5b7",
+        "clientAdmin": true,
+        "status": "Active"
+      },
+      {
+        "id": "CM-678109b5-ee9a-456e-91be-b70440afca80",
+        "userId": "USR-LAKSHMAN",
+        "organizationId": "ORG-ecd173de-cb08-49aa-8b1c-cd940ba5d5b7",
+        "clientAdmin": false,
+        "status": "Active"
+      },
+      {
+        "id": "CM-f7f309a4-5a53-485f-87f2-55711cf30bd7",
+        "userId": "USR-RUMESH",
+        "organizationId": "ORG-ecd173de-cb08-49aa-8b1c-cd940ba5d5b7",
+        "clientAdmin": false,
+        "status": "Active"
+      },
+      {
+        "id": "CM-188702ed-bcff-44c0-899a-66f39eb07f21",
+        "userId": "USR-SIVA-KUMAR",
+        "organizationId": "ORG-ecd173de-cb08-49aa-8b1c-cd940ba5d5b7",
+        "clientAdmin": false,
+        "status": "Active"
+      },
+      {
+        "id": "CM-411d46c2-9d30-4c3a-bd78-d13289b61697",
+        "userId": "USR-ANAND",
+        "organizationId": "ORG-ecd173de-cb08-49aa-8b1c-cd940ba5d5b7",
+        "clientAdmin": false,
+        "status": "Active"
+      },
+      {
+        "id": "CM-cd94e6d4-ae78-44ec-b555-290dbac564db",
+        "userId": "USR-15455c46-d821-4866-a2b3-73bca540ef2d",
+        "organizationId": "ORG-ecd173de-cb08-49aa-8b1c-cd940ba5d5b7",
+        "clientAdmin": false,
+        "status": "Active"
+      },
+      {
+        "id": "CM-9ea8e256-c54c-412d-989b-ae543f73848a",
+        "userId": "USR-a01bf80f-5c17-49ee-9cd9-3eade424dc5e",
+        "organizationId": "ORG-ecd173de-cb08-49aa-8b1c-cd940ba5d5b7",
+        "clientAdmin": false,
+        "status": "Active"
+      },
+      {
+        "id": "CM-88f8c14d-6067-4f9b-ad03-a29df197cc95",
+        "userId": "USR-187e1940-4afc-46c5-b55b-6fa26d7a2ed9",
+        "organizationId": "ORG-ecd173de-cb08-49aa-8b1c-cd940ba5d5b7",
+        "clientAdmin": false,
+        "status": "Active"
+      },
+      {
+        "id": "CM-61051017-c9e5-4fa3-909d-20f0f72bbf58",
+        "userId": "USR-ce3ff8e7-9a8f-451f-8c88-4c04b1674b49",
+        "organizationId": "ORG-ecd173de-cb08-49aa-8b1c-cd940ba5d5b7",
+        "clientAdmin": false,
+        "status": "Active"
+      },
+      {
+        "id": "CM-aa37fbcc-dd30-46b8-bf61-3d1c3ebbf9a3",
+        "userId": "USR-6696f0a7-2c64-464f-be3b-64c46f9c0878",
+        "organizationId": "ORG-ecd173de-cb08-49aa-8b1c-cd940ba5d5b7",
+        "clientAdmin": false,
+        "status": "Active"
+      },
+      {
+        "id": "CM-42cb63f3-c175-4962-8cc7-9a72b55653b3",
+        "userId": "USR-3359a54b-e59f-4a8f-8dff-9e90746c5e9f",
+        "organizationId": "ORG-ecd173de-cb08-49aa-8b1c-cd940ba5d5b7",
+        "clientAdmin": false,
+        "status": "Active"
+      }
+    ],
+    "factoryMemberships": [
+      {
+        "id": "FM-cd43848d-2bda-41c3-96d0-3c8a198240a9",
+        "userId": "USR-RUMESH",
+        "plantId": "PLANT-a7c73ffc-75de-4432-b706-042c95caa979",
+        "baseRole": "Standard User",
+        "status": "Active"
+      },
+      {
+        "id": "FM-6de59714-2547-4115-bdd8-376670edd1b7",
+        "userId": "USR-SIVA-KUMAR",
+        "plantId": "PLANT-a7c73ffc-75de-4432-b706-042c95caa979",
+        "baseRole": "Standard User",
+        "status": "Active"
+      },
+      {
+        "id": "FM-9cbd5024-fb33-4938-bfc9-6a47b08c4751",
+        "userId": "USR-ANAND",
+        "plantId": "PLANT-a7c73ffc-75de-4432-b706-042c95caa979",
+        "baseRole": "Standard User",
+        "status": "Active"
+      },
+      {
+        "id": "FM-0c4415bd-8449-405e-9fa3-d6985fcb7bd5",
+        "userId": "USR-15455c46-d821-4866-a2b3-73bca540ef2d",
+        "plantId": "PLANT-a7c73ffc-75de-4432-b706-042c95caa979",
+        "baseRole": "Standard User",
+        "status": "Active"
+      },
+      {
+        "id": "FM-5eb09909-0a49-4e2b-8df1-af894ea5d4d2",
+        "userId": "USR-a01bf80f-5c17-49ee-9cd9-3eade424dc5e",
+        "plantId": "PLANT-a7c73ffc-75de-4432-b706-042c95caa979",
+        "baseRole": "Standard User",
+        "status": "Active"
+      },
+      {
+        "id": "FM-beb5eec4-9147-404b-8d32-03cd56082b39",
+        "userId": "USR-187e1940-4afc-46c5-b55b-6fa26d7a2ed9",
+        "plantId": "PLANT-a7c73ffc-75de-4432-b706-042c95caa979",
+        "baseRole": "Standard User",
+        "status": "Active"
+      },
+      {
+        "id": "FM-f3c1d004-e6f7-4afc-84d2-0e5402ace3ef",
+        "userId": "USR-ce3ff8e7-9a8f-451f-8c88-4c04b1674b49",
+        "plantId": "PLANT-a7c73ffc-75de-4432-b706-042c95caa979",
+        "baseRole": "Standard User",
+        "status": "Active"
+      },
+      {
+        "id": "FM-04e99813-9ed8-4395-82b8-aa60b6188b27",
+        "userId": "USR-6696f0a7-2c64-464f-be3b-64c46f9c0878",
+        "plantId": "PLANT-a7c73ffc-75de-4432-b706-042c95caa979",
+        "baseRole": "Standard User",
+        "status": "Active"
+      },
+      {
+        "id": "FM-4f344c99-fe11-4d42-9151-b8bf4486b109",
+        "userId": "USR-3359a54b-e59f-4a8f-8dff-9e90746c5e9f",
+        "plantId": "PLANT-a7c73ffc-75de-4432-b706-042c95caa979",
+        "baseRole": "Standard User",
+        "status": "Active"
+      }
+    ],
+    "zoneAllocations": [
+      {
+        "id": "ZA-c7fc1755-0f16-4ea3-8286-4c3096aa3611",
+        "userId": "USR-RUMESH",
+        "plantId": "PLANT-a7c73ffc-75de-4432-b706-042c95caa979",
+        "zoneId": "ZONE-75d3aa6f-2e4b-4378-a0cd-3618e345f327",
+        "responsibility": "Member",
+        "status": "Active"
+      },
+      {
+        "id": "ZA-bdd3c6a6-a47d-4371-9de5-c9bc8a913764",
+        "userId": "USR-SIVA-KUMAR",
+        "plantId": "PLANT-a7c73ffc-75de-4432-b706-042c95caa979",
+        "zoneId": "ZONE-75d3aa6f-2e4b-4378-a0cd-3618e345f327",
+        "responsibility": "Member",
+        "status": "Active"
+      },
+      {
+        "id": "ZA-aa8e1dff-df90-498c-8909-6db443a88651",
+        "userId": "USR-ANAND",
+        "plantId": "PLANT-a7c73ffc-75de-4432-b706-042c95caa979",
+        "zoneId": "ZONE-fc84babc-46b6-43f8-82ff-5b0cffd80a6c",
+        "responsibility": "Member",
+        "status": "Active"
+      },
+      {
+        "id": "ZA-c0cfc8ee-004f-48d1-bb3c-ac7ab08e567a",
+        "userId": "USR-15455c46-d821-4866-a2b3-73bca540ef2d",
+        "plantId": "PLANT-a7c73ffc-75de-4432-b706-042c95caa979",
+        "zoneId": "ZONE-75d3aa6f-2e4b-4378-a0cd-3618e345f327",
+        "responsibility": "Member",
+        "status": "Active"
+      },
+      {
+        "id": "ZA-b4d39c22-7856-4bde-9652-970a9f370d5d",
+        "userId": "USR-a01bf80f-5c17-49ee-9cd9-3eade424dc5e",
+        "plantId": "PLANT-a7c73ffc-75de-4432-b706-042c95caa979",
+        "zoneId": "ZONE-75d3aa6f-2e4b-4378-a0cd-3618e345f327",
+        "responsibility": "Member",
+        "status": "Active"
+      },
+      {
+        "id": "ZA-14ffc895-0bf4-4b90-a11a-ee3343c41eae",
+        "userId": "USR-187e1940-4afc-46c5-b55b-6fa26d7a2ed9",
+        "plantId": "PLANT-a7c73ffc-75de-4432-b706-042c95caa979",
+        "zoneId": "ZONE-4d535ca0-aa1e-4a3e-a44d-821360bde58f",
+        "responsibility": "Member",
+        "status": "Active"
+      },
+      {
+        "id": "ZA-db496202-2484-40e9-a45d-36c7d7f0942d",
+        "userId": "USR-3359a54b-e59f-4a8f-8dff-9e90746c5e9f",
+        "plantId": "PLANT-a7c73ffc-75de-4432-b706-042c95caa979",
+        "zoneId": "ZONE-fc84babc-46b6-43f8-82ff-5b0cffd80a6c",
+        "responsibility": "Member",
+        "status": "Active"
+      }
+    ],
+    "factoryAdmins": [
+      {
+        "id": "FA-bfdf9d32-3f43-4919-bb8c-d75a2d7dd847",
+        "userId": "USR-LAKSHMAN",
+        "plantId": "PLANT-a7c73ffc-75de-4432-b706-042c95caa979",
+        "status": "Active"
+      },
+      {
+        "id": "FA-9901802b-a893-44ab-b3aa-b6fb9d3395cd",
+        "userId": "USR-ce3ff8e7-9a8f-451f-8c88-4c04b1674b49",
+        "plantId": "PLANT-a7c73ffc-75de-4432-b706-042c95caa979",
+        "status": "Active"
+      }
+    ],
+    "auditorGrants": [
+      {
+        "id": "AGR-7b93badf-3073-4e15-a4e3-e6c33182eb3f",
+        "userId": "USR-187e1940-4afc-46c5-b55b-6fa26d7a2ed9",
+        "plantId": "PLANT-a7c73ffc-75de-4432-b706-042c95caa979",
+        "zoneIds": [
+          "ZONE-75d3aa6f-2e4b-4378-a0cd-3618e345f327",
+          "ZONE-85c3a710-3545-4cdd-98e4-8b9da158fd40",
+          "ZONE-fc84babc-46b6-43f8-82ff-5b0cffd80a6c"
+        ],
+        "status": "Active"
+      }
+    ],
+    "departmentsDetailed": [
+      {
+        "id": "DEPT-19ecd35f-71c2-45c0-9b11-0108561a52cd",
+        "name": "Assembly",
+        "code": "ASM",
+        "zoneId": "ZONE-75d3aa6f-2e4b-4378-a0cd-3618e345f327",
+        "plantId": "PLANT-a7c73ffc-75de-4432-b706-042c95caa979",
+        "status": "Active"
+      },
+      {
+        "id": "DEPT-2460b156-61b4-4a62-84d5-891d4392ccd0",
+        "name": "Quality",
+        "code": "QLT",
+        "zoneId": "ZONE-75d3aa6f-2e4b-4378-a0cd-3618e345f327",
+        "plantId": "PLANT-a7c73ffc-75de-4432-b706-042c95caa979",
+        "status": "Active"
+      },
+      {
+        "id": "DEPT-d633681d-43a7-437f-aef1-cd1ae253ce25",
+        "name": "Maintenance",
+        "code": "MNT",
+        "zoneId": "ZONE-4d535ca0-aa1e-4a3e-a44d-821360bde58f",
+        "plantId": "PLANT-a7c73ffc-75de-4432-b706-042c95caa979",
+        "status": "Active"
+      },
+      {
+        "id": "DEPT-71468135-f25e-44f2-91d0-f7772949ff46",
+        "name": "Finishing",
+        "code": "FIN",
+        "zoneId": "ZONE-85c3a710-3545-4cdd-98e4-8b9da158fd40",
+        "plantId": "PLANT-a7c73ffc-75de-4432-b706-042c95caa979",
+        "status": "Active"
+      },
+      {
+        "id": "DEPT-3cf7bcbc-5050-42b0-8656-4db651b64676",
+        "name": "Logistics",
+        "code": "LOG",
+        "zoneId": "ZONE-fc84babc-46b6-43f8-82ff-5b0cffd80a6c",
+        "plantId": "PLANT-a7c73ffc-75de-4432-b706-042c95caa979",
+        "status": "Active"
+      }
+    ],
+    "rolesDetailed": [
+      {
+        "id": "ROLE-ee1d2f76-6606-45d0-8cad-9dc9ef49d927",
+        "personId": "USR-RUMESH",
+        "role": "Zone Leader",
+        "zoneId": "ZONE-75d3aa6f-2e4b-4378-a0cd-3618e345f327",
+        "status": "Active"
+      },
+      {
+        "id": "ROLE-2ec0dd91-710d-49d3-bb3d-ce7344d71020",
+        "personId": "USR-187e1940-4afc-46c5-b55b-6fa26d7a2ed9",
+        "role": "Zone Leader",
+        "zoneId": "ZONE-4d535ca0-aa1e-4a3e-a44d-821360bde58f",
+        "status": "Active"
+      },
+      {
+        "id": "ROLE-f70b85cb-1d34-4cf4-8907-77f383b04d83",
+        "personId": "USR-a01bf80f-5c17-49ee-9cd9-3eade424dc5e",
+        "role": "Department Leader",
+        "zoneId": "ZONE-75d3aa6f-2e4b-4378-a0cd-3618e345f327",
+        "departmentId": "DEPT-19ecd35f-71c2-45c0-9b11-0108561a52cd",
+        "status": "Active"
+      },
+      {
+        "id": "ROLE-3d4c6d16-c588-40eb-b4bf-39de8f40e196",
+        "personId": "USR-a01bf80f-5c17-49ee-9cd9-3eade424dc5e",
+        "role": "Department Leader",
+        "zoneId": "ZONE-75d3aa6f-2e4b-4378-a0cd-3618e345f327",
+        "departmentId": "DEPT-2460b156-61b4-4a62-84d5-891d4392ccd0",
+        "status": "Active"
+      },
+      {
+        "id": "ROLE-eabae40c-61a3-4815-bfe3-ee80feaf8ce0",
+        "personId": "USR-3359a54b-e59f-4a8f-8dff-9e90746c5e9f",
+        "role": "Department Leader",
+        "zoneId": "ZONE-fc84babc-46b6-43f8-82ff-5b0cffd80a6c",
+        "departmentId": "DEPT-3cf7bcbc-5050-42b0-8656-4db651b64676",
+        "status": "Active"
+      },
+      {
+        "id": "ROLE-489ce8ae-7821-421e-bd17-2acdb819a20e",
+        "personId": "USR-15455c46-d821-4866-a2b3-73bca540ef2d",
+        "role": "Department Member",
+        "zoneId": "ZONE-75d3aa6f-2e4b-4378-a0cd-3618e345f327",
+        "departmentId": "DEPT-19ecd35f-71c2-45c0-9b11-0108561a52cd",
+        "status": "Active"
+      },
+      {
+        "id": "ROLE-9321dcc4-79fd-4872-b2e6-0319221de2f7",
+        "personId": "USR-SIVA-KUMAR",
+        "role": "Department Member",
+        "zoneId": "ZONE-75d3aa6f-2e4b-4378-a0cd-3618e345f327",
+        "departmentId": "DEPT-2460b156-61b4-4a62-84d5-891d4392ccd0",
+        "status": "Active"
+      },
+      {
+        "id": "ROLE-a554c418-3b2d-4721-bce7-debe9b84875a",
+        "personId": "USR-ANAND",
+        "role": "Department Member",
+        "zoneId": "ZONE-fc84babc-46b6-43f8-82ff-5b0cffd80a6c",
+        "departmentId": "DEPT-3cf7bcbc-5050-42b0-8656-4db651b64676",
+        "status": "Active"
+      },
+      {
+        "id": "ROLE-8918713b-59ff-4744-9f43-5e3919765c1f",
+        "personId": "USR-6696f0a7-2c64-464f-be3b-64c46f9c0878",
+        "role": "Zone Champion",
+        "status": "Active"
+      }
+    ],
+    "administrationEventIds": [
+      "ADM-831d43af-215a-4aa8-869f-2bed2bf3128d",
+      "ADM-838b9ec8-af0a-45de-ab71-a3b28b9e8816",
+      "ADM-31e53c55-34ae-467a-815e-1d8177debc06",
+      "ADM-336d4297-85ac-4704-9933-0315424f48d0",
+      "ADM-680a5631-8d58-48be-828c-bcdbb9e6c0b9",
+      "ADM-b039effe-d48d-466c-b6dd-6434298992d0",
+      "ADM-e6ea9cc8-d3a3-4baf-ba2e-d25c1c7d7639",
+      "ADM-fc86b4bf-edec-4054-aa30-89c530a05baf",
+      "ADM-2d3bcc1e-432a-4dd0-a174-f13703984247",
+      "ADM-cc83d3ec-d6aa-4984-805d-6dac6754d08a",
+      "ADM-04920610-46b5-4c17-b100-2668e647a33a",
+      "ADM-3b760b4c-bae4-4351-90ca-9d3026ccbddd",
+      "ADM-4a753810-2df8-4c94-9f39-3df8ea950962",
+      "ADM-1c60876d-1527-4470-b380-85a356de8787",
+      "ADM-616dc44a-7f36-4a2c-aa49-30da2496456b",
+      "ADM-2708fdeb-5aaa-44b4-9899-74e86e9ced18",
+      "ADM-8f965767-7d3b-4dfa-a615-5bc04c4cee5a",
+      "ADM-8c81aaec-114a-467d-aee0-c59c8d74c52c",
+      "ADM-45f5f9bf-9119-4704-8882-c0e74353000a",
+      "ADM-5fd21524-e44d-4855-b70a-41b06f9150f4",
+      "ADM-35200917-7419-4eee-9641-0cd0c1ffdcba",
+      "ADM-fa0fbb54-67c6-430d-8bbf-a021a50b5da5",
+      "ADM-11abf821-54b3-4dc0-8407-3732913d6c74",
+      "ADM-b8284050-227a-4a9d-8c41-fa290fcbef04",
+      "ADM-dcd9ee85-b50f-4b0d-bcf2-5c99fda329e4",
+      "ADM-145e21f3-2ce8-4ae3-ba47-089006d553e1",
+      "ADM-94cbfe08-d73d-490e-a063-c06b66d65466",
+      "ADM-96301419-83e4-4360-8cd1-59c15e874729",
+      "ADM-8717c9a5-3ef2-40ea-a39a-5c6dff3a94ed",
+      "ADM-dcca721b-a8ab-4c83-8cc1-66e5dd8a61f8",
+      "ADM-b12604cc-eac3-4cae-af2b-00f528732081"
+    ],
+    "v4EventIds": [
+      "ADM-0bfc7e9e-7611-4312-8936-640037074891",
+      "ADM-44f06fc5-9af5-4648-92e0-a2c96aeaf6bd",
+      "ADM-19d54936-f17a-434b-a422-c056f85b91c5",
+      "ADM-70f2cddb-5247-4c58-ac25-9a2f9bee805f",
+      "ADM-2b7840a6-d657-40f4-8999-520679a78867",
+      "ADM-4ac958aa-0f7a-4443-a1e6-18db83cb9c38",
+      "ADM-12613a33-5a29-4660-b833-5fd0afbf782f",
+      "ADM-0d3e69c8-f87f-48d6-bc88-a7d51c93fcca",
+      "ADM-7f5ff0ff-2d59-4ff7-a52f-4aa15da476cb",
+      "ADM-001fb789-3013-4b90-8ba2-442aad8d89e7",
+      "ADM-ad5c3735-0ef4-4468-b959-1311d55ae16d",
+      "ADM-5a34e566-7f55-4424-9b2a-1564c5a5be23",
+      "ADM-9dafd165-4444-4654-87c2-17f4efdf848e",
+      "ADM-47d8b26c-f3a2-485e-86b5-ac94ef63f583",
+      "ADM-c41cf478-2991-4194-a8f1-36ba2ff4d4c3",
+      "ADM-e0f7488e-fa1d-40c2-ba63-101ef32a1176",
+      "ADM-08e0a23e-d0e4-4f06-9f58-09bb82a8a49a",
+      "ADM-41d08b68-a8c0-40b4-ae3f-c3ff9076a51a"
+    ]
+  },
+  "preservedOriginalCounts": {
+    "people": 25,
+    "actions": 39,
+    "audits": 4,
+    "redTags": 23
+  },
+  "acceptance": {
+    "unitFiles": 143,
+    "unitTests": 1546,
+    "unitResult": "passed after acceptance repairs",
+    "browserJourneys": 3,
+    "browserResult": "passed in isolated contexts",
+    "typescript": "passed",
+    "changedFileLint": "passed"
+  },
+  "privateBackupDirectory": "/tmp/ops-iq-demo-backup",
+  "materializedExistingDefaults": {
+    "plants": [
+      "PLANT-EGM"
+    ],
+    "zones": [
+      "ZONE-A",
+      "ZONE-B",
+      "ZONE-C",
+      "ZONE-D"
+    ]
+  }
+}

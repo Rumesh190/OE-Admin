@@ -15,6 +15,11 @@ let creationScope = false;
 
 export function registerRecordCreationStore(key: string, refresh: () => void) { refreshers.set(key, refresh); }
 
+/** Reload registered browser-backed module stores after an explicit demo-data import. */
+export function refreshRegisteredRecordStores() {
+  for (const refresh of refreshers.values()) refresh();
+}
+
 /** Keep existing synchronous commands; run their complete read/create/write inside one browser lock. */
 export async function withBusinessRecordCreation<T>(create: () => T): Promise<T> {
   const execute = () => {
@@ -58,4 +63,14 @@ export function allocateModuleRecordId(module: RecordModule, existingIds: readon
   if (!saved.success) throw new Error(saved.message);
   // Reservation is permanent even if the later record write fails or the record is deleted.
   return id;
+}
+
+/** V4 source transactions hold the business lock through the nested administration lock.
+ * No fixture refresh/normalization is performed on canonical transaction inputs. */
+export async function withVersionedBusinessCreation<T>(create: () => Promise<T>): Promise<T> {
+  if (typeof navigator === "undefined" || !navigator.locks?.request) throw new Error("Versioned record creation requires Web Locks.");
+  return navigator.locks.request(RECORD_CREATION_LOCK, async () => {
+    creationScope = true;
+    try { return await create(); } finally { creationScope = false; }
+  });
 }

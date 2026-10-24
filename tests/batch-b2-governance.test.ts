@@ -1,3 +1,4 @@
+import { seedLegacyDirectoryPerson } from "./helpers/legacy-directory";
 import { authenticateDemoFixture } from "./helpers/demo-session";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { MyAction } from "@/features/five-s/types/my-actions";
@@ -75,23 +76,25 @@ describe("B2 override compatibility", () => {
 });
 
 describe("B2 confirmed Audit deletion policy", () => {
-  it("requires confirmation and protects completed, in-progress and linked Audits", async () => {
-    await setup(); const audits = await import("@/lib/five-s/audit-store");
+  it("requires confirmation and current-session Admin while retaining linked Actions for every Audit status", async () => {
+    const { store } = await setup(); const audits = await import("@/lib/five-s/audit-store");
     const draft = { id: "B2-AUDIT", title: "B2 Audit", plant: "Egmore Plant", department: "Production", area: "Zone B", auditor: auditor.name, status: "Draft" as const, score: 0, maxScore: 0, completionPercentage: 0, createdAt: "2030-10-01", dueDate: "2030-10-20", sections: [] };
     audits.setFiveSAudits([draft]);
     expect(audits.deleteFiveSAudit(draft.id, auditor)).toBe(false);
     expect(audits.deleteFiveSAudit(draft.id, leader, true)).toBe(false);
-    audits.setFiveSAudits([{ ...draft, status: "Completed" }]); expect(audits.deleteFiveSAudit(draft.id, auditor, true)).toBe(false);
-    audits.setFiveSAudits([{ ...draft, status: "In Progress" }]); expect(audits.deleteFiveSAudit(draft.id, auditor, true)).toBe(false);
-    const { getActions, setActions } = await import("@/lib/actions/action-store"); getActions(); setActions([fixture({ source: "Audit", sourceModule: "audit", sourceId: draft.id })]);
-    audits.setFiveSAudits([draft]); expect(audits.deleteFiveSAudit(draft.id, auditor, true)).toBe(false);
-    setActions([]); expect(audits.deleteFiveSAudit(draft.id, auditor, true)).toBe(true); expect(audits.getFiveSAuditById(draft.id)).toBeUndefined();
+    for (const status of ["Draft", "Scheduled", "In Progress", "Completed"] as const) {
+      const current = { ...draft, id: `${draft.id}-${status}`, status };
+      const linked = fixture({ source: "Audit", sourceModule: "audit", sourceId: current.id }); store.setActions([linked]);
+      const before = structuredClone(store.getActions());
+      audits.setFiveSAudits([current]); expect(audits.deleteFiveSAudit(current.id, auditor, true)).toBe(true);
+      expect(audits.getFiveSAuditById(current.id)).toBeUndefined(); expect(store.getActions()).toEqual(before);
+    }
   });
-  it("permits the assigned active auditor but rejects another auditor and inactive users", async () => {
+  it("rejects caller-supplied non-Admin auditors and inactive users", async () => {
     const { store } = await setup(); store.setActions([]); const admin = await import("@/features/five-s/administration/store"); const { permissionsForRoles } = await import("@/features/five-s/administration/permissions"); const audits = await import("@/lib/five-s/audit-store");
-    const user = admin.createAdminUser({ employeeId: "B2-AUDITOR", name: "B2 Auditor", email: "b2.auditor@example.test", plant: "Egmore Plant", status: "Active", roles: ["Auditor"], zoneMemberships: [{ zone: "Zone A", responsibility: "Auditor" }], permissions: permissionsForRoles(["Auditor"]) }, auditor.id)!;
+    const user = seedLegacyDirectoryPerson(admin, { employeeId: "B2-AUDITOR", name: "B2 Auditor", email: "b2.auditor@example.test", plant: "Egmore Plant", status: "Active", roles: ["Auditor"], zoneMemberships: [{ zone: "Zone A", responsibility: "Auditor" }], permissions: permissionsForRoles(["Auditor"]) });
     const draft = { id: "B2-AUDIT", title: "B2 Audit", plant: "Egmore Plant", department: "Production", area: "Zone B", auditor: user.name, status: "Scheduled" as const, score: 0, maxScore: 0, completionPercentage: 0, createdAt: "2030-10-01", dueDate: "2030-10-20", sections: [] };
-    audits.setFiveSAudits([draft]); expect(audits.canDeleteFiveSAudit(draft, { id: user.id })).toBe(true);
+    audits.setFiveSAudits([draft]); expect(audits.canDeleteFiveSAudit(draft, { id: user.id })).toBe(false);
     expect(audits.canDeleteFiveSAudit({ ...draft, auditor: "Different Auditor" }, { id: user.id })).toBe(false);
     admin.setAdminUserActive(user.id, false, auditor.id); expect(audits.deleteFiveSAudit(draft.id, { id: user.id }, true)).toBe(false);
   });

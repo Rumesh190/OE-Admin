@@ -1,9 +1,10 @@
 "use client";
+import { RecordDeletionMenu } from "@/components/ops/record-deletion-menu";
 
 import { CanonicalLinkedRecords } from "@/components/ops/ops-linked-records";
 
 import { useState } from "react";
-import Link from "next/link";
+import Link from "@/components/ops/ops-record-link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, CalendarDays, CheckCircle2, Edit3, ExternalLink, FileText, Link2, MapPin, Play, RotateCcw, Sparkles, UserRound, UsersRound } from "lucide-react";
 import { PageContainer } from "@/components/layout/page-container";
@@ -63,7 +64,7 @@ export default function VisualImprovementDetailPage({ improvementId, initialTab 
   }
 
   return <PageContainer className="max-w-none">
-    <FiveSPageHeader eyebrow={`Visual Improvement / ${item.id}`} title={item.title} description={`${item.plant} · ${item.zone} · ${item.location}`} leading={<Button size="icon-sm" variant="ghost" nativeButton={false} render={<Link href="/visual-improvement" />} aria-label="Back to Visual Improvement"><ArrowLeft className="size-4" /></Button>} actions={<><VisualImprovementStatusBadge status={item.status} />{item.status === "Draft" && mayManage && <Button size="sm" variant="outline" onClick={() => planVisualImprovement(item.id, currentUser)}>Move to Planned</Button>}{item.status === "Planned" && mayManage && <Button size="sm" onClick={() => startVisualImprovement(item.id, currentUser)}><Play className="size-3.5" />Start Work</Button>}{editable && <Button size="sm" variant="outline" nativeButton={false} render={<Link href={`/visual-improvement/${encodeURIComponent(item.id)}/edit`} />}><Edit3 className="size-3.5" />Edit</Button>}{item.status === "Completed" && <Button size="sm" nativeButton={false} render={<Link href={`/visual-improvement/${encodeURIComponent(item.id)}/report`} />}><FileText className="size-3.5" />View Report</Button>}</>} />
+    <FiveSPageHeader eyebrow={`Visual Improvement / ${item.id}`} title={item.title} description={`${item.plant} · ${item.zone} · ${item.location}`} leading={<Button size="icon-sm" variant="ghost" nativeButton={false} render={<Link href="/visual-improvement" />} aria-label="Back to Visual Improvement"><ArrowLeft className="size-4" /></Button>} actions={<><RecordDeletionMenu module="visualImprovement" recordId={item.id} returnTo="/visual-improvement" /><VisualImprovementStatusBadge status={item.status} />{item.status === "Draft" && mayManage && <Button size="sm" variant="outline" onClick={() => planVisualImprovement(item.id, currentUser)}>Move to Planned</Button>}{item.status === "Planned" && mayManage && <Button size="sm" onClick={() => startVisualImprovement(item.id, currentUser)}><Play className="size-3.5" />Start Work</Button>}{editable && <Button size="sm" variant="outline" nativeButton={false} render={<Link href={`/visual-improvement/${encodeURIComponent(item.id)}/edit`} />}><Edit3 className="size-3.5" />Edit</Button>}{item.status === "Completed" && <Button size="sm" nativeButton={false} render={<Link href={`/visual-improvement/${encodeURIComponent(item.id)}/report`} />}><FileText className="size-3.5" />View Report</Button>}</>} />
 
     <section aria-label="Improvement ownership" className="grid overflow-hidden rounded-xl border bg-card sm:grid-cols-2 lg:grid-cols-4"><HeaderFact icon={UserRound} label="Owner" value={item.ownerName} /><HeaderFact icon={MapPin} label="Plant / Zone" value={`${item.plant} · ${item.zone}`} /><HeaderFact icon={Sparkles} label="Category" value={item.category} /><HeaderFact icon={CalendarDays} label="Updated" value={formatVisualDate(item.updatedAt, true)} /></section>
 

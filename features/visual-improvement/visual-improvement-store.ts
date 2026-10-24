@@ -1,4 +1,7 @@
 "use client";
+import { requireLegacyOperationalWrite } from "@/lib/legacy-operational-write";
+import { activeOperationalRecords, useActiveOperationalRecords, getRecordTombstone, registerDeletionSource } from "@/lib/records/record-tombstones";
+
 
 import { registerActionCreationSource } from "@/lib/actions/action-source-access";
 
@@ -18,7 +21,8 @@ import type {
   VisualImprovementEvidence,
 } from "./types";
 
-const STORAGE_KEY = "ops-visual-improvements-v1";
+export const VISUAL_IMPROVEMENT_STORAGE_KEY = "ops-visual-improvements-v1";
+const STORAGE_KEY = VISUAL_IMPROVEMENT_STORAGE_KEY;
 const FIXTURE_VERSION_KEY = "ops-visual-improvements-fixture-version";
 const FIXTURE_VERSION = "visual-improvement-workflow-v1";
 
@@ -128,6 +132,7 @@ function load() {
 }
 
 function persist(next: VisualImprovement[]) {
+  requireLegacyOperationalWrite("visualImprovement");
   const previous = records;
   records = next;
   if (typeof window !== "undefined") {
@@ -144,6 +149,7 @@ function event(type: VisualImprovementActivityType, label: string, actor: Visual
   return { id: `VI-H-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, type, label, actorId: actor.id, actorName: actor.name, at: new Date().toISOString(), remark, actionId };
 }
 function updateRecord(id: string, updater: (record: VisualImprovement) => VisualImprovement) {
+  if (getRecordTombstone("visualImprovement", id)) return null;
   load();
   const current = records.find((record) => record.id === id);
   if (!current) return null;
@@ -151,12 +157,14 @@ function updateRecord(id: string, updater: (record: VisualImprovement) => Visual
   return persist(records.map((record) => record.id === id ? updated : record)) ? updated : null;
 }
 
-export function useVisualImprovements() { return useSyncExternalStore(subscribe, snapshot, () => VISUAL_IMPROVEMENT_SEED_RECORDS); }
-export function getVisualImprovements() { load(); return records; }
-export function getVisualImprovementById(id: string) { load(); return records.find((record) => record.id === id); }
+export function useVisualImprovements() { return useActiveOperationalRecords("visualImprovement", useSyncExternalStore(subscribe, snapshot, () => VISUAL_IMPROVEMENT_SEED_RECORDS)); }
+export function getVisualImprovements() { load(); return activeOperationalRecords("visualImprovement", records); }
+export function getVisualImprovementById(id: string) {
+  if (getRecordTombstone("visualImprovement", id)) return undefined; load(); return records.find((record) => record.id === id); }
 export function setVisualImprovements(next: VisualImprovement[]) { records = next; loaded = true; listeners.forEach((listener) => listener()); }
 
 export function createVisualImprovement(input: CreateVisualImprovementInput, actor: VisualImprovementActor, saveAsDraft = false) {
+  requireLegacyOperationalWrite("visualImprovement");
   load();
   if (!input.title.trim() || !input.plant || !input.zone || !input.location.trim() || !input.beforeDescription.trim() || !input.beforeEvidence.length) throw new Error("Title, location, before description, and before evidence are required.");
   const now = new Date().toISOString();
@@ -248,3 +256,5 @@ registerActionCreationSource("visualImprovement", (input, user, identity) => {
   const item = input.sourceId ? getVisualImprovementById(input.sourceId) : undefined;
   return { record: item, zone: item?.zone, permitted: Boolean(item && canViewVisualImprovement(user, identity, item) && canCreateVisualImprovementAction(user, identity)), alreadyLinked: item?.actionId };
 });
+
+registerDeletionSource("visualImprovement", id => { load(); const item = records.find(item => item.id === id); return item ? { id: item.id, title: item.title, organizationId: "organizationId" in item && typeof item.organizationId === "string" ? item.organizationId : undefined, plant: item.plant, zone: item.zone, aliases: [], linkedActionIds: item.actionId ? [item.actionId] : [] } : undefined; });

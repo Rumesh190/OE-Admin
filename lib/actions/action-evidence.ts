@@ -1,3 +1,6 @@
+import { getRedTagEvidenceArchive } from "@/features/five-s/red-tag/store";
+import { getGembaEvidenceArchive } from "@/features/gemba/gemba-store";
+import { deletedActionSource } from "@/lib/records/record-tombstones";
 import { getRedTagIdentificationEvidence, type RedTag } from "@/features/five-s/red-tag/types";
 import type { MyAction, MyActionEvidence } from "@/features/five-s/types/my-actions";
 import type { GembaState } from "@/features/gemba/types";
@@ -29,7 +32,7 @@ export function resolveActionSourceBeforeEvidence(action: MyAction, redTags: Red
   if (inferActionSourceModule(action) === "gemba") {
     const observationId = action.sourceObservationId;
     const observation = observationId
-      ? (gemba ?? getGembaState()).observations.find((item) => item.id === observationId && (!action.sourceId || item.gembaId === action.sourceId))
+      ? (deletedActionSource(action, "gemba") ? getGembaEvidenceArchive() : gemba ?? getGembaState()).observations.find((item) => item.id === observationId && (!action.sourceId || item.gembaId === action.sourceId))
       : undefined;
     const sourceLabel = `Gemba · ${getActionSourceRecordLabel(action)}`;
     if (!observation) return {
@@ -65,7 +68,7 @@ export function resolveActionSourceBeforeEvidence(action: MyAction, redTags: Red
   };
 
   const sourceId = action.sourceId ?? action.sourceTitle;
-  const source = redTags.find((tag) => tag.id === sourceId || tag.tagNumber === sourceId);
+  const source = (deletedActionSource(action, "redTag") ? getRedTagEvidenceArchive() : redTags).find((tag) => tag.id === sourceId || tag.tagNumber === sourceId);
   const sourceLabel = source ? `Red Tag · ${source.tagNumber}` : `Red Tag · ${getActionSourceRecordLabel(action)}`;
 
   if (!source) return {

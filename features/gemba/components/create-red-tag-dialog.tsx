@@ -19,7 +19,7 @@ import type { GembaObservation } from '@/features/gemba/types';
 
 interface Props {open:boolean;onOpenChange:(open:boolean)=>void;observation:GembaObservation;walkId:string;plant:string;zone:string;onCreated?:(id:string)=>void;}
 export function CreateRedTagFromGembaDialog({open,onOpenChange,observation,walkId,plant,zone,onCreated}:Props) {
-  const actor=useCurrentUser(), admin=useAdminUsers().find(u=>u.id===actor.id);
+  const actor=useCurrentUser(), admin=useAdminUsers(true).find(u=>u.id===actor.id);
   const [itemName,setItemName]=useState(observation.title),[remarks,setRemarks]=useState(observation.description),[section,setSection]=useState(observation.location);
   const [department,setDepartment]=useState(getOrganizationZone(zone)?.department??'');
   const [reasonCategory,setReasonCategory]=useState<RedTagReasonCategory|''>(''),[reason,setReason]=useState<RedTagReason|''>(''),[customReason,setCustomReason]=useState('');
@@ -43,8 +43,8 @@ export function CreateRedTagFromGembaDialog({open,onOpenChange,observation,walkI
     finally {guard.current=false;setBusy(false);}
   }
   return <Dialog open={open} onOpenChange={next=>{if(!guard.current)onOpenChange(next);}}><DialogContent className="max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] sm:max-w-2xl">
-    <DialogHeader className="pr-8"><DialogTitle className="flex items-center gap-2"><Tag className="size-5 shrink-0" />Create Red Tag from Observation</DialogTitle><DialogDescription>{plant} · {zone}. Submit the physical item to its assigned Zone Leader for review.</DialogDescription></DialogHeader>
-    {linkedId?<div className="grid gap-4"><OpsFeedback tone="success" message={`${linkedId} created and linked. Zone Leader review is required.`} /><div className="flex flex-wrap gap-2"><Button variant="outline" onClick={()=>onOpenChange(false)}>Continue Gemba walk</Button><Button nativeButton={false} render={<Link href={`/5s/red/${encodeURIComponent(linkedId)}`} />}>View Red Tag</Button></div></div>:<div className="grid min-w-0 gap-4">
+    <DialogHeader className="pr-8"><DialogTitle className="flex items-center gap-2"><Tag className="size-5 shrink-0" />Create Red Tag from Observation</DialogTitle><DialogDescription>{plant} · {zone}. Create the physical-item record and submit it when an independent Zone Leader is available.</DialogDescription></DialogHeader>
+    {linkedId?<div className="grid gap-4"><OpsFeedback tone="success" message={`${linkedId} created and linked.`} /><div className="flex flex-wrap gap-2"><Button variant="outline" onClick={()=>onOpenChange(false)}>Continue Gemba walk</Button><Button nativeButton={false} render={<Link href={`/5s/red/${encodeURIComponent(linkedId)}`} />}>View Red Tag</Button></div></div>:<div className="grid min-w-0 gap-4">
       {error&&<OpsFeedback tone="error" message={error} />}
       {!allowed?<p className="text-sm text-muted-foreground">{getRedTagCreationError(admin,plant,zone)||'Red Tag creation is unavailable for this observation.'}</p>:<>
       <label className="grid gap-1.5 text-sm">Item Name *<Input value={itemName} onChange={e=>setItemName(e.target.value)} disabled={busy||Boolean(pendingId)} /></label>

@@ -4,7 +4,8 @@ import { usePathname } from "next/navigation";
 import { OpsTabBar } from "@/components/ops/ops-tabs";
 
 const AUDIT_TABS = [
-  { id: "audits", label: "Audits", href: "/audits" },
+  { id: "audits", label: "All", href: "/audits" },
+  ...["Draft", "Scheduled", "In Progress", "Review", "Completed"].map(stage => ({ id: stage, label: stage, href: `/audits?tab=${encodeURIComponent(stage)}` })),
   { id: "settings", label: "Settings", href: "/audits/settings" },
 ];
 

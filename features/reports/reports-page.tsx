@@ -14,7 +14,8 @@ import {
   X,
 } from "lucide-react";
 
-import { PageContainer } from "@/components/layout/page-container";
+import { useUrlState } from "@/lib/navigation/use-url-state";
+import { OpsListingLayout as PageContainer } from "@/components/ops/ops-listing";
 import { OpsEmptyState } from "@/components/ops/ops-empty-state";
 import { OpsTabBar } from "@/components/ops/ops-tabs";
 import { Badge } from "@/components/ui/badge";
@@ -104,9 +105,11 @@ export default function ReportsPage({ initialTab, initialSearch = "", initialSor
   const visualManagement = useVisualManagementStore();
   const allGemba = useGembaStore();
   const enabledModules = getEnabledReportModules(access);
-  const requestedTab = validTab(initialTab);
+  const url = useUrlState();
+  const requestedTab = validTab(url.params.get("tab") ?? initialTab);
   const safeInitialTab = requestedTab === "all" || enabledModules.some((module) => module.id === requestedTab) ? requestedTab : "all";
-  const [activeTab, setActiveTab] = useState<ReportTab>(safeInitialTab);
+  const activeTab = safeInitialTab;
+  function setActiveTab(value: ReportTab) { url.update({ tab: value }, "push"); setFilters(current => ({ ...current, module: "All" })); }
   const [filters, setFilters] = useState<ReportLibraryFilters>(() => ({
     ...DEFAULT_FILTERS,
     search: initialSearch,
@@ -176,6 +179,8 @@ export default function ReportsPage({ initialTab, initialSearch = "", initialSor
       actions={<ExportMenu exportVisibleList={exportVisibleList} hasReports={visibleReports.length > 0} />}
     />
 
+    <OpsTabBar label="Report modules" active={activeTab} onChange={(id) => setActiveTab(id as ReportTab)} tabs={[{ id: "all", label: "All", count: library.length }, ...enabledModules.map((module) => ({ id: module.id, label: module.label, count: library.filter(report => report.module === module.id).length }))]} />
+
     <section aria-label="Report summary" className="grid grid-cols-2 overflow-hidden rounded-xl border bg-card sm:grid-cols-4">
       <Metric label="Reports Generated" value={library.length} />
       <Metric label="Audit Reports" value={library.filter((report) => report.module === "audit").length} />
@@ -183,7 +188,7 @@ export default function ReportsPage({ initialTab, initialSearch = "", initialSor
       <Metric label="Meeting Reports" value={library.filter((report) => report.module === "visualManagement").length} />
     </section>
 
-    <OpsTabBar label="Report modules" active={activeTab} onChange={(id) => setActiveTab(id as ReportTab)} tabs={[{ id: "all", label: "All" }, ...enabledModules.map((module) => ({ id: module.id, label: module.label }))]} />
+
 
     <section className="min-w-0 overflow-hidden rounded-xl border bg-card" aria-labelledby="report-library-title">
       <div className="border-b p-3 sm:p-4">

@@ -34,7 +34,7 @@ export default function VisualImprovementNewPage() {
   const adminUser = useAdminUsers().find((user) => user.id === currentUser.id);
   const zoneConfiguration = useFiveSZoneConfiguration();
   const organization = useOrganizationConfiguration();
-  const mayUseAnyZone = adminUser?.roles.some((role) => role === "Admin" || role === "Auditor");
+  const mayUseAnyZone = canCreateVisualImprovement(adminUser, currentUser);
   const availableZones = mayUseAnyZone ? zoneConfiguration : zoneConfiguration.filter((item) => adminUser?.zoneMemberships.some((membership) => membership.zone === item.name));
   const defaultZone = availableZones.some((item) => item.name === currentUser.primaryZone) ? currentUser.primaryZone : availableZones[0]?.name ?? zoneConfiguration[0]?.name ?? "";
   const [title, setTitle] = useState("");

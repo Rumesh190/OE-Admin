@@ -1,6 +1,8 @@
 "use client"
 
 import { useEffect } from "react"
+import { useAccessContext, isLegacyABCOperationalContext } from "@/features/five-s/administration/access-v4-context"
+import { getAuthenticatedDemoActor } from "@/lib/demo-session"
 import { Bell } from "lucide-react"
 import Link from "next/link"
 
@@ -15,9 +17,9 @@ import {
 } from "@/components/ui/popover"
 import { useCurrentUser } from "@/lib/current-user"
 import { useAdminUsers } from "@/features/five-s/administration/store"
-import { evaluateActionAttention } from "@/lib/actions/action-attention-store"
+import { evaluateActionAttention, retryActionAttention, useActionAttentionStorageError } from "@/lib/actions/action-attention-store"
 import { useActionStore } from "@/lib/actions/action-store"
-import { markNotificationRead, useNotifications } from "@/lib/notifications/notification-store"
+import { markNotificationRead, useNotifications, useNotificationStorageError, retryNotificationPersistence } from "@/lib/notifications/notification-store"
 
 /**
  * Notification entry point. Real events (audit assigned, corrective action
@@ -26,9 +28,19 @@ import { markNotificationRead, useNotifications } from "@/lib/notifications/noti
  */
 function NotificationBell() {
   const currentUser = useCurrentUser()
+  const { context, error, ready } = useAccessContext()
+  const profile = getAuthenticatedDemoActor()?.user
+  if (!ready || !profile || error || !isLegacyABCOperationalContext(context) || currentUser.isSuperAdmin || (!context && profile?.accessModel === "v3")) return <Button variant="ghost" size="icon" disabled aria-label="Notifications unavailable in this administration context" title="Operational notifications are unavailable in this administration context"><Bell className="size-4" /></Button>
+  return <LegacyNotificationBell />
+}
+function LegacyNotificationBell() {
+  const currentUser = useCurrentUser()
   const actions = useActionStore()
   const adminUsers = useAdminUsers()
   const notifications = useNotifications(currentUser.id)
+  const notificationError = useNotificationStorageError()
+  const attentionError = useActionAttentionStorageError()
+  const storageError = notificationError ?? attentionError
   const unreadCount = notifications.filter((item) => !item.read).length
 
   useEffect(() => {
@@ -43,11 +55,13 @@ function NotificationBell() {
             variant="ghost"
             size="icon"
             className="relative"
-            aria-label="Notifications"
+            title={storageError ? "Notification delivery paused: browser storage unavailable" : undefined}
+            aria-label={storageError ? "Notifications: browser storage unavailable" : "Notifications"}
           />
         }
       >
         <Bell className="size-4" />
+        {storageError && <span aria-hidden="true" className="absolute right-1 top-1 size-2 rounded-full bg-amber-500" />}
         {unreadCount > 0 && (
           <Badge
             variant="danger"
@@ -61,8 +75,14 @@ function NotificationBell() {
         <PopoverHeader>
           <PopoverTitle>Notifications</PopoverTitle>
         </PopoverHeader>
+        {storageError && (
+          <div role="status" className="mb-3 space-y-2 text-sm">
+            <p>{storageError} Notification delivery is paused; existing records are preserved.</p>
+            <Button variant="outline" size="sm" onClick={() => { retryNotificationPersistence(); retryActionAttention(actions, adminUsers) }}>Retry notifications</Button>
+          </div>
+        )}
         {notifications.length === 0 ? (
-          <p className="text-sm text-muted-foreground">You&apos;re all caught up.</p>
+          <p className="text-sm text-muted-foreground">{storageError ? "Saved notifications are unavailable or empty." : "You’re all caught up."}</p>
         ) : (
           <div className="-mx-2 mt-1 max-h-80 overflow-y-auto">
             {notifications.map((item) => (

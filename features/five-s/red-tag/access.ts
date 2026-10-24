@@ -5,22 +5,30 @@ import { getAuthenticatedDemoActor } from "@/lib/demo-session";
 import { getOrganizationAccess } from "@/lib/module-entitlements";
 import { getOrganizationPlant, getOrganizationZone, getOrganizationZones } from "@/lib/organization-store";
 import { RED_TAG_SECTIONS, type RedTag } from "./types";
+import { hasPlatformLegacyOperationalAccess } from "@/lib/platform-operational-access";
+import { canCreateDemoModuleRecord } from "@/lib/demo/demo-module-creation";
+import { getActiveAccessContext } from "@/features/five-s/administration/access-v4-context";
 
 export function canCreateRedTag(user: AdminUser | undefined) {
-  return user?.status === "Active" && (hasPermission(user, "red_tag.create") || user.roles.some(role => ["Admin", "Auditor", "Zone Leader"].includes(role)));
+  const candidate = user ?? getAuthenticatedDemoActor()?.user;
+  return Boolean(candidate?.status === "Active" && (canCreateDemoModuleRecord("redTag", candidate.id) || hasPlatformLegacyOperationalAccess("redTag") || (candidate.id !== "USR-OPS-SUPER-ADMIN" && candidate.accessModel !== "v3" && (hasPermission(candidate, "red_tag.create") || candidate.roles.some(role => ["Admin", "Auditor", "Zone Leader"].includes(role))))));
 }
 
 /** Demo-session boundary only. A production backend must enforce the same scope. */
 export function getRedTagSessionActor(expectedId?: string) {
-  return getAuthenticatedDemoActor(expectedId)?.user;
+  const actor = getAuthenticatedDemoActor(expectedId);
+  return actor && (canCreateDemoModuleRecord("redTag", actor.user.id) || (actor.identity.isSuperAdmin && hasPlatformLegacyOperationalAccess("redTag")) || (!actor.identity.isSuperAdmin && actor.user.accessModel !== "v3")) ? actor.user : undefined;
 }
 
 export function canAccessRedTagZone(user: AdminUser | undefined, plantName: string, zoneName: string) {
   const plant = getOrganizationPlant(plantName);
   const zone = getOrganizationZone(zoneName);
-  return Boolean(user?.status === "Active" && plant?.status === "Active" && zone?.status === "Active" && zone.plantId === plant.id
-    && (user.plant === plant.name || user.plant === "All organizations")
-    && (user.roles.includes("Admin") || user.zoneMemberships.some(membership => getOrganizationZone(membership.zone)?.id === zone.id)));
+  if (!user || user.status !== "Active" || !plant || plant.status !== "Active" || !zone || zone.status !== "Active" || zone.plantId !== plant.id) return false;
+  if (hasPlatformLegacyOperationalAccess("redTag", plant.name)) return true;
+  const context = getActiveAccessContext();
+  if (canCreateDemoModuleRecord("redTag", user.id) && context?.kind === "factory" && context.plantId === plant.id) return true;
+  return (user.plant === plant.name || user.plant === "All organizations")
+    && (user.roles.includes("Admin") || user.zoneMemberships.some(membership => getOrganizationZone(membership.zone)?.id === zone.id));
 }
 
 export const RED_TAG_OWN_ZONE_MESSAGE = "You cannot raise a Red Tag in your assigned Zone. A Red Tag must be raised by an authorized user from another Zone.";
@@ -37,6 +45,7 @@ export function isRedTagOwnLeaderZone(user: AdminUser | undefined, targetZone: s
 
 export function getRedTagCreationError(user: AdminUser | undefined, plant: string, zone: string) {
   if (!canCreateRedTag(user) || !getOrganizationAccess().redTag || !canAccessRedTagZone(user, plant, zone)) return "You do not have permission to create a Red Tag in this Zone.";
+  if (user && canCreateDemoModuleRecord("redTag", user.id)) return "";
   if (isRedTagOwnLeaderZone(user, zone)) return RED_TAG_OWN_ZONE_MESSAGE;
   const reviewer = getRedTagZoneLeader(plant, zone);
   if (!reviewer || !(hasPermission(reviewer, "red_tag.manage") || hasPermission(reviewer, "actions.review"))) return "This Zone requires one active authorized Zone Leader before a Red Tag can be submitted.";

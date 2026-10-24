@@ -1,7 +1,7 @@
 'use client';
 import { getGembaState } from '@/features/gemba/gemba-store';
 import { canMutateGembaWalk } from '@/features/gemba/gemba-access';
-import { createAndSubmitRedTagV2, getRedTag, type CreateRedTagV2Input } from '@/features/five-s/red-tag/store';
+import { createAndSubmitRedTagV2, createRedTagV2, getRedTag, type CreateRedTagV2Input } from '@/features/five-s/red-tag/store';
 import { getRedTagCreationError, getRedTagSessionActor, getRedTagZoneLeader } from '@/features/five-s/red-tag/access';
 import { getOrganizationAccess } from '@/lib/module-entitlements';
 import { getOutgoingRelationships } from '@/lib/relationships/relationship-store';
@@ -41,8 +41,8 @@ export function createRedTagFromGemba(walkId:string,observationId:string,input:C
     if(tag&&(tag.plant!==walk.plant||tag.zone!==walk.zone)) throw new Error('The linked Red Tag is outside this observation scope.');
     if(!tag) {
       const leader=getRedTagZoneLeader(walk.plant,walk.zone);
-      if(!leader) throw new Error('This Zone requires one active assigned Zone Leader before a Red Tag can be submitted.');
-      tag=createAndSubmitRedTagV2({...input,plant:walk.plant,zone:walk.zone,createdById:actor.id,createdByName:actor.name},actor,leader);
+      const creationInput={...input,plant:walk.plant,zone:walk.zone,createdById:actor.id,createdByName:actor.name};
+      tag=leader&&leader.id!==actor.id?createAndSubmitRedTagV2(creationInput,actor,leader):createRedTagV2(creationInput,actor);
       if(!tag) throw new Error('Unable to create Red Tag. Check required fields and browser storage.');
     }
     onReserved(tag.id);

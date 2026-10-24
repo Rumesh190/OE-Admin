@@ -1,9 +1,10 @@
 "use client";
+import { RecordDeletionMenu } from "@/components/ops/record-deletion-menu";
 import { useUrlState } from "@/lib/navigation/use-url-state";
 import { ActionLink } from "@/components/ops/ops-return-link";
 
 import { useMemo, useState } from "react";
-import Link from "next/link";
+import Link from "@/components/ops/ops-record-link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, CalendarDays, Clock3, Eye, FileText, Footprints, MapPin, Play, Users } from "lucide-react";
 
@@ -47,7 +48,7 @@ export default function GembaDetailPage({ walkId, initialTab }: { walkId: string
   const counts = (["Positive", "Opportunity", "Issue"] as GembaObservationType[]).map((type) => ({ type, value: observations.filter((item) => item.type === type).length }));
 
   return <PageContainer className="max-w-none">
-    <FiveSPageHeader eyebrow={`Gemba Walk · ${walk.id}`} title={walk.purpose} description={`${walk.plant} · ${formatGembaZoneLabel(walk.zone)} · Lead: ${walk.leadName}`} leading={<Button size="icon-sm" variant="ghost" nativeButton={false} render={<Link href="/gemba" />} aria-label="Back to Gemba"><ArrowLeft className="size-4" /></Button>} actions={<>{walk.status === "Scheduled" && canConductGembaWalk(adminUser?.roles, currentUser) && <Button onClick={() => { startGembaWalk(walk.id, currentUser); router.push(`/gemba/${walk.id}/walk`); }}><Play className="size-4" />Start Walk</Button>}{walk.status === "In Progress" && canConductGembaWalk(adminUser?.roles, currentUser) && <Button nativeButton={false} render={<Link href={`/gemba/${walk.id}/walk`} />}><Footprints className="size-4" />Continue Walk</Button>}{walk.status === "Completed" && <Button variant="outline" nativeButton={false} render={<Link href={`/gemba/${walk.id}/report`} />}><FileText className="size-4" />View Report</Button>}<GembaStatusBadge status={walk.status} /></>} />
+    <FiveSPageHeader eyebrow={`Gemba Walk · ${walk.id}`} title={walk.purpose} description={`${walk.plant} · ${formatGembaZoneLabel(walk.zone)} · Lead: ${walk.leadName}`} leading={<Button size="icon-sm" variant="ghost" nativeButton={false} render={<Link href="/gemba" />} aria-label="Back to Gemba"><ArrowLeft className="size-4" /></Button>} actions={<><RecordDeletionMenu module="gemba" recordId={walk.id} returnTo="/gemba" />{walk.status === "Scheduled" && canConductGembaWalk(adminUser?.roles, currentUser) && <Button onClick={() => { startGembaWalk(walk.id, currentUser); router.push(`/gemba/${walk.id}/walk`); }}><Play className="size-4" />Start Walk</Button>}{walk.status === "In Progress" && canConductGembaWalk(adminUser?.roles, currentUser) && <Button nativeButton={false} render={<Link href={`/gemba/${walk.id}/walk`} />}><Footprints className="size-4" />Continue Walk</Button>}{walk.status === "Completed" && <Button variant="outline" nativeButton={false} render={<Link href={`/gemba/${walk.id}/report`} />}><FileText className="size-4" />View Report</Button>}<GembaStatusBadge status={walk.status} /></>} />
 
     <section className="grid grid-cols-2 gap-2 sm:grid-cols-4"><DetailMetric label="Observations" value={observations.length} /><DetailMetric label="Positive" value={counts.find((item) => item.type === "Positive")?.value ?? 0} tone="positive" /><DetailMetric label="Issues" value={counts.find((item) => item.type === "Issue")?.value ?? 0} tone="issue" /><DetailMetric label="Actions Created" value={actions.length} tone="action" /></section>
     <GembaTabBar active={active} onChange={(id) => setActive(id as DetailTab)} label="Walk details" tabs={[{ id: "overview", label: "Overview" }, { id: "observations", label: "Observations", count: observations.length }, { id: "actions", label: "Actions", count: actions.length }, { id: "activity", label: "Activity", count: walk.activity.length }]} />

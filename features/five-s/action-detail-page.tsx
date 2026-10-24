@@ -1,12 +1,17 @@
 "use client";
+import { AuditActionDetail, useVersionedActionRecord } from "@/features/actions/audit-action-detail";
+import { isV4Action } from "@/lib/actions/action-v4-policy";
+import { deletedRecordHref } from "@/lib/records/record-tombstones";
+import { RecordDeletionMenu } from "@/components/ops/record-deletion-menu";
 
+import { OpsDetailSection } from "@/components/ops/ops-detail-section";
 import { CanonicalLinkedRecords } from "@/components/ops/ops-linked-records";
 /* eslint-disable @next/next/no-img-element -- user-provided evidence uses local/data URLs and the existing fullscreen viewer. */
 
 import { useEffect, useRef, useState } from "react";
-import Link from "next/link";
+import Link from "@/components/ops/ops-record-link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Building2, CalendarDays, Camera, ChevronDown, Check, CheckCircle2, ClipboardCheck, ExternalLink, FileText, IndianRupee, Link2, MapPin, Maximize2, Paperclip, Play, RotateCcw, Upload, UserRound, X } from "lucide-react";
+import { ArrowLeft, Building2, CalendarDays, Camera, ChevronDown, Circle, Check, CheckCircle2, ClipboardCheck, ExternalLink, FileText, IndianRupee, Link2, MapPin, Maximize2, Paperclip, Play, RotateCcw, Upload, UserRound, X } from "lucide-react";
 
 import { PageContainer } from "@/components/layout/page-container";
 import { OpsCameraCapture } from "@/components/ops/ops-camera-capture";
@@ -49,7 +54,12 @@ const DETAIL_SECTIONS: Array<{ id: DetailSection; label: string }> = [
   { id: "overview", label: "Overview" }, { id: "evidence", label: "Evidence" }, { id: "review", label: "Review" },
 ];
 
-export default function FiveSActionDetailPage({ actionId, initialSection, returnTo }: { actionId: string; initialSection?: string; returnTo?: string }) {
+export default function FiveSActionDetailPage(props: { actionId: string; initialSection?: string; returnTo?: string }) {
+  const record = useVersionedActionRecord(props.actionId);
+  if (record && isV4Action(record)) return <AuditActionDetail actionId={props.actionId}/>;
+  return <LegacyFiveSActionDetailPage {...props}/>;
+}
+function LegacyFiveSActionDetailPage({ actionId, initialSection, returnTo }: { actionId: string; initialSection?: string; returnTo?: string }) {
   const router = useRouter();
   const actions = useActionStore();
   const redTags = useRedTags();
@@ -59,7 +69,8 @@ export default function FiveSActionDetailPage({ actionId, initialSection, return
   const actorWithAuthority = { id: actor.id, name: actor.name, roles: adminUser?.roles, permissions: adminUser?.permissions };
   const storedAction = actions.find((item) => item.id === actionId);
   const action = getRoleVisibleActions(actions, actor, adminUser).find((item) => item.id === actionId);
-  const backTo = validateReturnTo(returnTo);
+  const requestedBackTo = validateReturnTo(returnTo);
+  const backTo = requestedBackTo && !deletedRecordHref(requestedBackTo) ? requestedBackTo : undefined;
   const [feedback, setFeedback] = useState<{tone: "success" | "error"; message: string}>();
   const attention = useActionAttention(actionId);
   const [section, setSection] = useState<DetailSection | null>(() => DETAIL_SECTIONS.some((item) => item.id === initialSection) ? initialSection as DetailSection : "overview");
@@ -273,7 +284,8 @@ export default function FiveSActionDetailPage({ actionId, initialSection, return
     {feedback && <OpsFeedback {...feedback} />}
     {canEditActionDueDate(action, actorWithAuthority) && <div className="flex flex-wrap items-center gap-3"><Button variant="outline" onClick={() => { setNewDueDate(action.dueDate); setDueDateReason(""); setDueDateError(""); setDueDateOpen(true); }}>Edit Due Date</Button>{action.dueDateOverride && <span className="text-xs text-muted-foreground">Approved override · Priority baseline {formatShortDate(action.priorityDueDate ?? action.dueDate)}</span>}</div>}
     {ownershipError && <p role="alert" className="text-sm text-destructive">{ownershipError}</p>}
-    <FiveSPageHeader eyebrow="OPS Workspace / Actions" title={action.title} description={action.id} leading={<Button variant="ghost" size="icon-sm" onClick={() => router.push(backTo ?? "/actions")} aria-label={backTo ? "Back to Source" : "Back to Actions"}><ArrowLeft className="size-4" /></Button>} actions={reassignmentMessage || action.status === "Completed" ? <>{reassignmentMessage && <ReassignmentBadge message={reassignmentMessage} />}{action.status === "Completed" && <Button variant="outline" onClick={() => router.push(`/actions/${encodeURIComponent(action.id)}/report`)}><FileText className="size-4" />View Report</Button>}</> : undefined} toolbar={<div className="flex w-full min-w-0 items-center overflow-x-auto pb-0.5"><LifecycleTimeline action={action} /></div>} />
+    <FiveSPageHeader eyebrow="OPS Workspace / Actions" title={action.title} description={action.id} leading={<Button variant="ghost" size="icon-sm" onClick={() => router.push(backTo ?? "/actions")} aria-label={backTo ? "Back to Source" : "Back to Actions"}><ArrowLeft className="size-4" /></Button>} actions={<><RecordDeletionMenu module="action" recordId={action.id} returnTo="/actions" />{reassignmentMessage || action.status === "Completed" ? <>{reassignmentMessage && <ReassignmentBadge message={reassignmentMessage} />}{action.status === "Completed" && <Button variant="outline" onClick={() => router.push(`/actions/${encodeURIComponent(action.id)}/report`)}><FileText className="size-4" />View Report</Button>}</> : undefined}</>} />
+    <LifecycleTimeline action={action} />
 
     <Card className="min-w-0 gap-0 overflow-hidden"><CardContent className={cn("grid grid-cols-2 gap-px bg-border/70 p-0 sm:grid-cols-2 sm:p-0 lg:grid-cols-4", action.status === "Completed" ? "xl:grid-cols-7" : "xl:grid-cols-8")}><HeaderMeta label="Status"><Badge variant={ACTION_STATUS_CONFIG[action.status].variant}>{ACTION_STATUS_CONFIG[action.status].label}</Badge></HeaderMeta><HeaderMeta label="Priority"><Badge variant={ACTION_PRIORITY_CONFIG[action.priority].variant}>{action.priority}</Badge></HeaderMeta>{action.status !== "Completed" && <HeaderMeta label="Attention"><div className="flex min-w-0 flex-col items-start gap-2"><Badge variant={dueDays < 0 ? "danger" : dueDays <= 1 ? "warning" : "info"} className="max-w-full whitespace-normal text-left">{urgencyLabel}</Badge>{activeEscalation && <><Badge variant="danger" className="max-w-full whitespace-normal text-left">Escalated · Level {activeEscalation.level}</Badge><p className="text-xs font-normal text-muted-foreground">{activeEscalation.toUserName} · {formatDateTime(activeEscalation.createdAt)}</p></>}{activeEscalation?.status === "Open" && activeEscalation.toUserId === actor.id && <Button className="h-auto whitespace-normal text-left" size="sm" variant="outline" onClick={() => acknowledgeActionEscalation(activeEscalation.id, actorWithAuthority)}>Acknowledge escalation</Button>}</div></HeaderMeta>}<HeaderMeta label="Due Date"><span className={cn(isActionOverdue(action) && "text-red-600 dark:text-red-400")}>{formatShortDate(action.dueDate)}</span></HeaderMeta><HeaderMeta label="Action Owner">{action.responsiblePersonName ?? action.assignedTo ?? "Unassigned"}</HeaderMeta><HeaderMeta label="Zone Leader">{action.zoneLeaderName ?? "—"}</HeaderMeta><HeaderMeta label="Assigned By">{action.assignedByName ?? action.createdByName ?? action.auditor ?? "—"}</HeaderMeta><HeaderMeta label="Source"><span className="inline-flex items-center gap-1.5"><SourceIcon className="size-3.5 text-muted-foreground" />{source.label}</span></HeaderMeta></CardContent></Card>
 
@@ -319,7 +331,16 @@ function LifecycleTimeline({ action }: { action: MyAction }) {
   const hasRework = action.status === "Rework Required" || [...(action.reviewHistory ?? []), ...(action.activityHistory ?? [])].some((event) => event.type === "sent_back");
   const stages = ACTION_LIFECYCLE_STAGES.filter((stage) => stage !== "Rework" || hasRework);
   const currentIndex = stages.indexOf(getActionLifecycleStage(action.status));
-  return <div className="flex min-w-[720px] flex-1 items-start" aria-label="Action lifecycle">{stages.map((label, index) => { const complete = index < currentIndex; const current = index === currentIndex; return <div key={label} className="relative flex min-w-0 flex-1 flex-col items-center gap-1 text-center"><span className={cn("relative z-10 flex size-5 shrink-0 items-center justify-center rounded-full border text-[9px]", complete ? "border-emerald-500 bg-emerald-500 text-white" : current ? "border-primary bg-primary text-primary-foreground ring-4 ring-primary/10" : "border-border bg-background text-muted-foreground")}>{complete ? <Check className="size-3" /> : index + 1}</span>{index < stages.length - 1 && <span className={cn("absolute left-[calc(50%+10px)] right-[calc(-50%+10px)] top-2.5 h-px", index < currentIndex ? "bg-emerald-400" : "bg-border")} />}<span className={cn("whitespace-nowrap text-xs leading-4", current ? "font-semibold text-primary" : complete ? "font-medium text-foreground" : "font-medium text-muted-foreground")}>{label}</span></div>; })}</div>;
+  const events = [...(action.activityHistory ?? []), ...(action.reviewHistory ?? [])].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  return <OpsDetailSection title="Workflow"><ol aria-label="Action lifecycle" className={cn("grid grid-cols-2 gap-3", stages.length === 6 ? "sm:grid-cols-3 lg:grid-cols-6" : "sm:grid-cols-5")}>{stages.map((label, index) => {
+    const complete = action.status === "Completed" || index < currentIndex;
+    const current = !complete && index === currentIndex;
+    const state = complete ? "completed" : current ? "current" : "pending";
+    const event = events.find(event => label === "Assigned" ? ["assigned", "reassigned"].includes(event.type) : label === "In Progress" ? event.type === "started" : label === "Submitted for Review" ? ["submitted", "resubmitted"].includes(event.type) : label === "Under Review" ? event.type === "reviewed" : label === "Rework" ? event.type === "sent_back" : ["closed", "verified"].includes(event.type));
+    const at = event?.createdAt ?? (label === "Assigned" ? action.assignedAt : label === "Submitted for Review" ? action.submittedForReviewAt : label === "Under Review" ? action.reviewedAt : label === "Closed" ? action.closedAt ?? action.completedAt : undefined);
+    const actor = event?.actorName ?? (label === "Assigned" ? action.assignedByName : label === "Submitted for Review" ? action.completedByName : label === "Under Review" ? action.reviewedBy : label === "Closed" ? action.closedBy ?? action.reviewedBy : undefined);
+    return <li key={label} aria-current={current ? "step" : undefined} data-state={state} className="flex min-w-0 items-start gap-2"><span aria-hidden="true" className={cn("grid size-7 shrink-0 place-items-center rounded-full border", complete ? "border-emerald-600 bg-emerald-600 text-white" : current ? "border-primary bg-primary text-primary-foreground" : "bg-background text-muted-foreground")}>{complete ? <Check className="size-4" /> : <Circle className="size-3 fill-current" />}</span><span className="min-w-0 break-words text-xs font-semibold">{label}<span className="mt-1 block font-normal text-muted-foreground">{state}</span>{(complete || current) && <>{actor && <span className="mt-1 block font-normal text-muted-foreground">{actor}</span>}{at && <time dateTime={at} className="mt-1 block font-normal text-muted-foreground">{formatDateTime(at)}</time>}</>}</span></li>;
+  })}</ol></OpsDetailSection>;
 }
 
 function ActionDetailAccordion({ id, label, open, onToggle, children }: { id: DetailSection; label: string; open: boolean; onToggle: () => void; children: React.ReactNode }) {

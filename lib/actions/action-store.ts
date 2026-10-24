@@ -1,4 +1,10 @@
 "use client";
+import { isV4Action, canReadV4Action, canWorkV4Action, canVerifyV4Action, persistV4ActionUpdate, withV4ActionWrite } from "./action-v4-policy";
+import { readAdministrationPayload, ADMINISTRATION_JOURNAL_KEY } from "@/lib/administration-storage";
+import { getActiveAccessContext } from "@/features/five-s/administration/access-v4-context";
+import { useAccessContext } from "@/features/five-s/administration/access-v4-context";
+import { activeOperationalRecords, useActiveOperationalRecords, getRecordTombstone, registerDeletionSource, registerDeletionActionReader } from "@/lib/records/record-tombstones";
+
 
 import { allocateModuleRecordId, registerRecordCreationStore } from "@/lib/records/module-records";
 
@@ -24,7 +30,7 @@ import type {
 } from "@/features/five-s/types/my-actions";
 import { createNotification } from "@/lib/notifications/notification-store";
 import { getFiveSZoneConfiguration, getPriorityDueDate } from "@/lib/five-s/configuration";
-import { safeSetStorage, safeSetStorageString } from "@/lib/browser-storage";
+import { safeSetStorage } from "@/lib/browser-storage";
 import { getActionTypeLabel, isActionType, getActionSourceDefinition, normalizeActionSource, inferActionSourceModule } from "@/lib/actions/action-config";
 
 export interface ActionActor {
@@ -32,6 +38,7 @@ export interface ActionActor {
   name: string;
   roles?: readonly string[];
   permissions?: readonly string[];
+  v4Expectation?: { selectionId: string; revision: number };
 }
 
 type CreateActionInput = Omit<
@@ -44,10 +51,9 @@ type ActionEvidence =
 
 const STORAGE_KEY =
   "standalone-5s-actions";
-const DEMO_FIXTURE_VERSION_KEY = "standalone-5s-action-fixture-version";
-const DEMO_FIXTURE_VERSION = "canonical-zone-a-dashboard-v4";
 
 let hasLoadedFromStorage = false;
+let lastCanonicalPayload: string | null | undefined;
 
 let actions: MyAction[] = MY_ACTIONS.map(normalizeEvidence);
 
@@ -60,6 +66,24 @@ const listeners =
    ========================================================= */
 
 function loadFromStorage() {
+  if (typeof window !== "undefined") {
+    const raw = readAdministrationPayload(STORAGE_KEY);
+    if (hasLoadedFromStorage && raw === lastCanonicalPayload) return;
+    if (hasLoadedFromStorage && raw !== lastCanonicalPayload) hasLoadedFromStorage = false;
+    lastCanonicalPayload = raw;
+    const context = getActiveAccessContext();
+    if (context && context.kind !== "platform" && context.organizationId !== DEMO_ORGANIZATION.id) {
+      const parsed: unknown = raw ? JSON.parse(raw) : [];
+      if (!Array.isArray(parsed)) throw new Error("Invalid canonical Action payload. Preserve storage.");
+      actions = parsed as MyAction[]; hasLoadedFromStorage = true; return;
+    }
+    if (raw) {
+      const parsed: unknown = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.some(a => a && isV4Action(a))) {
+        actions = parsed as MyAction[]; hasLoadedFromStorage = true; return;
+      }
+    }
+  }
   if (
     hasLoadedFromStorage ||
     typeof window === "undefined"
@@ -72,9 +96,7 @@ function loadFromStorage() {
 
   try {
     const stored =
-      window.localStorage.getItem(
-        STORAGE_KEY
-      );
+      readAdministrationPayload(STORAGE_KEY);
 
     if (!stored) {
       actions = MY_ACTIONS.map(normalizeEvidence);
@@ -88,18 +110,9 @@ function loadFromStorage() {
       JSON.parse(stored);
 
     if (Array.isArray(parsed)) {
-      let storedActions = parsed as MyAction[];
-      const fixtureVersion = window.localStorage.getItem(DEMO_FIXTURE_VERSION_KEY);
-      if (fixtureVersion !== DEMO_FIXTURE_VERSION) {
-        const canonicalDemo = MY_ACTIONS.find((action) => action.id === "ACT-ZA-001");
-        if (canonicalDemo) {
-          storedActions = [canonicalDemo, ...storedActions.filter((action) => ![canonicalDemo.id, "ACT-ZD-001"].includes(action.id))];
-        }
-        safeSetStorageString(DEMO_FIXTURE_VERSION_KEY, DEMO_FIXTURE_VERSION);
-      }
-      const storedIds = new Set(storedActions.map((action) => action.id));
-      const missingSeedActions = MY_ACTIONS.filter((action) => !storedIds.has(action.id));
-      actions = [...missingSeedActions, ...storedActions].map(normalizeEvidence);
+      const storedActions = parsed as MyAction[];
+      // An existing collection is authoritative; cleanup must not resurrect samples.
+      actions = storedActions.map(normalizeEvidence);
     }
   } catch (error) {
     console.error(
@@ -118,7 +131,10 @@ function saveToStorage() {
     return;
   }
 
-  return safeSetStorage(STORAGE_KEY, actions);
+  if (window.localStorage.getItem(ADMINISTRATION_JOURNAL_KEY) || (hasLoadedFromStorage && window.localStorage.getItem(STORAGE_KEY) !== lastCanonicalPayload)) return { success: false as const, reason: "unavailable" as const, message: "Action state changed or recovery is pending; reload before retrying." };
+  const result = safeSetStorage(STORAGE_KEY, actions);
+  if (result.success) lastCanonicalPayload = window.localStorage.getItem(STORAGE_KEY);
+  return result;
 }
 
 /** Preserve legacy arrays while making evidence purpose explicit. */
@@ -184,21 +200,28 @@ function getServerSnapshot() {
  * localStorage persistence.
  */
 export function useActionStore() {
-  return useSyncExternalStore(
+  useAccessContext();
+  const active = useActiveOperationalRecords("action", useSyncExternalStore(
     subscribe,
     getSnapshot,
     getServerSnapshot
-  );
+  ));
+  return active.filter(visibleCanonicalAction);
 }
 
 /**
  * Return all current actions.
  */
+function visibleCanonicalAction(a: MyAction) {
+  if (isV4Action(a)) return canReadV4Action(a);
+  try { const c = getActiveAccessContext(); return !c || (c.kind === "factory" && c.organizationId === DEMO_ORGANIZATION.id && c.plantId === "PLANT-EGM"); } catch { return false; }
+}
+export function refreshCanonicalActionStore() { hasLoadedFromStorage = false; loadFromStorage(); listeners.forEach(l => l()); window.dispatchEvent?.(new Event("ops-action-v4-changed")); }
 export function getActions():
   MyAction[] {
   loadFromStorage();
 
-  return actions;
+  return activeOperationalRecords("action", actions).filter(visibleCanonicalAction);
 }
 
 /**
@@ -207,11 +230,12 @@ export function getActions():
 export function getActionById(
   actionId: string
 ): MyAction | undefined {
+  if (getRecordTombstone("action", actionId)) return undefined;
   loadFromStorage();
 
   return actions.find(
     (action) =>
-      action.id === actionId
+      action.id === actionId && visibleCanonicalAction(action)
   );
 }
 
@@ -281,7 +305,7 @@ export function createAction(
 export function rollbackCreatedAction(actionId: string, actor?: ActionActor): boolean {
   loadFromStorage();
   const action = actions.find((item) => item.id === actionId);
-  if (!action || !activeActionActor(action, actor) || !isCreator(action, getAdminUser(actor!.id)!) || (action.activityHistory?.length ?? 0) > 1 || action.activityHistory?.[0]?.type !== "created") return false;
+  if (!action || isV4Action(action) || !activeActionActor(action, actor) || !isCreator(action, getAdminUser(actor!.id)!) || (action.activityHistory?.length ?? 0) > 1 || action.activityHistory?.[0]?.type !== "created") return false;
   const previousActions = actions;
   actions = actions.filter((item) => item.id !== actionId);
   const result = saveToStorage();
@@ -347,6 +371,7 @@ function isZoneLeader(action: MyAction, actor: ActionActor) {
 }
 
 export function canEditActionDueDate(action: MyAction, actor: ActionActor) {
+  if (isV4Action(action)) return false;
   const user = getAdminUser(actor.id);
   return action.status !== "Completed" && Boolean(user?.status === "Active" && ((user.roles.includes("Admin") && user.permissions.includes("actions.assign") && (user.plant === action.plant || user.plant === "All organizations")) || isZoneLeader(action, actor)));
 }
@@ -368,6 +393,7 @@ export function changeActionDueDate(actionId: string, actor: ActionActor, newDat
 }
 
 export function canReviewAction(action: MyAction, actor: ActionActor) {
+  if (isV4Action(action)) return canVerifyV4Action(action, actor.id);
   const user = getAdminUser(actor.id);
   if (user?.status !== "Active" || isResponsible(action, user)) return false;
   if (user.roles.includes("Zone Leader") && !user.roles.some(role => ["Admin", "Auditor", "Reviewer"].includes(role)) && !isZoneLeader(action, user)) return false;
@@ -396,6 +422,7 @@ export function getActionClosureError(action: MyAction, actor: ActionActor) {
 }
 
 export function canReassignAction(action: MyAction, actor: ActionActor) {
+  if (isV4Action(action)) return false;
   const user = getAdminUser(actor.id);
   if (action.status === "Completed" || user?.status !== "Active") return false;
   return Boolean(user.roles.includes("Admin") || getFiveSZoneConfiguration(action.area)?.leaderId === actor.id || isCreator(action, actor));
@@ -406,11 +433,13 @@ function appendActivity(action: MyAction, activity: MyActionActivity) {
 }
 
 function activeActionActor(action: MyAction, actor?: ActionActor) {
+  if (isV4Action(action)) return actor && canReadV4Action(action) ? getAuthenticatedDemoActor(actor.id)?.user : undefined;
   const user = actor?.id ? getAdminUser(actor.id) : undefined;
   return user?.status === "Active" && (user.plant === action.plant || user.plant === "All organizations") ? user : undefined;
 }
 
 export function canEditActionContent(action: MyAction, actor?: ActionActor) {
+  if (isV4Action(action)) return Boolean(actor && canWorkV4Action(action, actor.id));
   const user = activeActionActor(action, actor);
   return Boolean(user && (user.permissions.includes("actions.work") || isZoneLeader(action, user)) && isResponsible(action, user)
     && ["Assigned", "Open", "In Progress", "Rework Required"].includes(action.status)
@@ -418,11 +447,13 @@ export function canEditActionContent(action: MyAction, actor?: ActionActor) {
 }
 
 function canEditActionSetup(action: MyAction, actor?: ActionActor) {
+  if (isV4Action(action)) return false;
   const user = activeActionActor(action, actor);
   return Boolean(user && action.status === "Awaiting Assignment" && user.permissions.includes("actions.create") && (user.roles.includes("Admin") || isCreator(action, user)));
 }
 
 function canEditAuditFinding(action: MyAction, actor?: ActionActor) {
+  if (isV4Action(action)) return false;
   const user = activeActionActor(action, actor);
   return Boolean(user && action.status !== "Completed" && inferActionSourceModule(action) === "audit" && user.permissions.includes("actions.create") && isCreator(action, user));
 }
@@ -433,6 +464,7 @@ export function getActionStartState(action: MyAction) {
     action.activityHistory?.at(-1)?.id, action.submittedForReviewAt]);
 }
 function authenticatedActionWorker(action: MyAction, actor: ActionActor) {
+  if (isV4Action(action)) return canWorkV4Action(action, actor.id) ? getAuthenticatedDemoActor(actor.id)?.user : undefined;
   const current = getAuthenticatedDemoActor(actor.id);
   const scoped: MyAction & { organizationId?: string } = action;
   const access = getOrganizationAccess();
@@ -459,7 +491,7 @@ export function startAssignedAction(actionId: string, actor: ActionActor, action
   return updateActionInternal(actionId, {
     status: "In Progress", actionType,
     activityHistory: appendActivity(action, { ...createActivity("started", user, `Previous status: ${action.status}; Action type: ${getActionTypeLabel(actionType)}`), actionType }),
-  });
+  }, actor);
 }
 
 export function canUndoActionStart(action: MyAction, actor: ActionActor) {
@@ -485,7 +517,7 @@ export function undoActionStart(actionId: string, actor: ActionActor, draft?: { 
     ...(draft ? { actionTakenDescription: draft.observation, resolutionObservation: draft.observation,
       correctiveActionCategory: draft.category || undefined, costSaving: draft.costSaving } : {}),
     activityHistory: appendActivity(action, { ...createActivity("start_undone", getAdminUser(actor.id)!, `Start Work undone; returned to ${status}. Saved details and evidence retained.`), actionType: action.actionType }),
-  });
+  }, actor);
 }
 
 /** Compact legacy binaries before the revision snapshot duplicates their references. */
@@ -497,7 +529,7 @@ export async function submitActionForReviewWithEvidenceStorage(
   const action = getActionById(actionId);
   if (!action || !canEditActionContent(action, actor)) return undefined;
   if (!resolution.observation.trim() || !resolution.correctiveActionCategory || action.evidence.length === 0 || !Number.isFinite(resolution.costSaving) || resolution.costSaving < 0) return undefined;
-  await compactActionEvidenceStorage();
+  if (!isV4Action(action)) await compactActionEvidenceStorage();
   // The synchronous command rechecks current permissions and status after the async write.
   return submitActionForReview(actionId, actor, resolution);
 }
@@ -532,8 +564,8 @@ export function submitActionForReview(
     completedAt: undefined,
     activityHistory: appendActivity(action, submitted),
     submissionRevisions: [...(action.submissionRevisions ?? []), revision],
-  });
-  if (updated && reviewerRecipientId(action)) createNotification({
+  }, actor);
+  if (updated && !isV4Action(action) && reviewerRecipientId(action)) createNotification({
     recipientUserId: reviewerRecipientId(action)!,
     title: isResubmission ? "Action resubmitted for review" : "Action submitted for review",
     message: `${action.title} · Submitted by: ${actor.name} · Source: ${getActionSourceDefinition(action).label} ${action.sourceId ?? action.sourceTitle} · Zone: ${action.area}`,
@@ -554,8 +586,8 @@ export function sendActionBack(actionId: string, actor: ActionActor, remark: str
     reviewHistory: [...(action.reviewHistory ?? []), review],
     activityHistory: appendActivity(action, review),
     submissionRevisions: reviewSubmissionRevision(action, review),
-  });
-  if (updated) createNotification({
+  }, actor);
+  if (updated && !isV4Action(action)) createNotification({
     recipientUserId: responsibleId(action),
     title: "Action sent back for rework",
     message: `${action.title} · Reviewer: ${actor.name} · ${remark.trim()}`,
@@ -600,8 +632,8 @@ export function closeReviewedAction(actionId: string, actor: ActionActor, closur
     reviewHistory: [...(action.reviewHistory ?? []), reviewedActivity, closedActivity],
     submissionRevisions: reviewSubmissionRevision(action, reviewedActivity),
     activityHistory: [...(action.activityHistory ?? []), reviewedActivity, closedActivity],
-  });
-  if (updated) createNotification({
+  }, actor);
+  if (updated && !isV4Action(action)) createNotification({
     recipientUserId: responsibleId(action),
     title: "Action approved and closed",
     message: `${action.title} · Reviewed by: ${reviewer.name} · Cost Saving: ₹${(action.costSaving ?? 0).toLocaleString("en-IN")}`,
@@ -648,9 +680,17 @@ export function reassignActionOwner(actionId: string, actor: ActionActor, member
  */
 function updateActionInternal(
   actionId: string,
-  updates: Partial<MyAction>
+  updates: Partial<MyAction>,
+  actor?: ActionActor
 ): MyAction | undefined {
   loadFromStorage();
+  const versioned = actions.find(a => a.id === actionId);
+  if (versioned && isV4Action(versioned)) {
+    const updated = persistV4ActionUpdate(versioned, updates, actor);
+    actions = actions.map(a => a.id === actionId ? updated : a);
+    lastCanonicalPayload = window.localStorage.getItem(STORAGE_KEY);
+    listeners.forEach(l => l()); window.dispatchEvent?.(new Event("ops-action-v4-changed")); return updated;
+  }
 
   const previousActions = actions;
   let updatedAction:
@@ -684,9 +724,11 @@ function updateActionInternal(
 /** Rebase onto current records after asynchronous asset writes; preserve concurrent workflow changes. */
 export async function compactActionEvidenceStorage() {
   loadFromStorage();
-  const apply = await prepareActionEvidenceCompaction(actions);
+  const apply = await prepareActionEvidenceCompaction(actions.filter(a => !isV4Action(a)));
+  hasLoadedFromStorage = false; loadFromStorage();
   const previous = actions;
-  const next = apply(previous);
+  const compacted = apply(previous.filter(a => !isV4Action(a)));
+  const next = previous.map(a => isV4Action(a) ? a : compacted.find(r => r.id === a.id) ?? a);
   if (next.every((action, index) => action === previous[index])) return;
   actions = next;
   const result = saveToStorage();
@@ -695,6 +737,7 @@ export async function compactActionEvidenceStorage() {
 }
 
 export function canEditActionPriority(action: MyAction, actor: ActionActor) {
+  if (isV4Action(action)) return false;
   const user = getAdminUser(actor.id);
   return canEditActionDueDate(action, actor) || Boolean(action.status === "Awaiting Assignment" && user?.status === "Active" && user.plant === action.plant && user.permissions.includes("actions.create") && isCreator(action, user));
 }
@@ -711,7 +754,7 @@ export function changeActionPriority(actionId: string, actor: ActionActor, prior
 /** Attention automation may only append its own event types, never replace lifecycle history. */
 export function appendActionAttentionActivity(actionId: string, activity: MyActionActivity) {
   const action = getActionById(actionId);
-  if (!action || action.status === "Completed" || !["reminder_generated", "escalated", "escalation_acknowledged"].includes(activity.type)) return undefined;
+  if (!action || isV4Action(action) || action.status === "Completed" || !["reminder_generated", "escalated", "escalation_acknowledged"].includes(activity.type)) return undefined;
   if (action.activityHistory?.some(event => event.id === activity.id)) return action;
   return updateActionInternal(actionId, { activityHistory: appendActivity(action, activity) });
 }
@@ -719,6 +762,7 @@ export function appendActionAttentionActivity(actionId: string, activity: MyActi
 /** Generic edits cannot write identity, source, ownership, dates or lifecycle metadata. */
 export function updateAction(actionId: string, updates: Partial<MyAction>, actor?: ActionActor): MyAction | undefined {
   const action = getActionById(actionId);
+  if (action && isV4Action(action) && Object.keys(updates).some(k => ["evidence", "progressEvidence", "issueEvidence"].includes(k))) return undefined;
   if (!action || !activeActionActor(action, actor) || !Object.keys(updates).length) return undefined;
   const content = new Set(["title", "description", "actionCategory"]);
   const finding = new Set(["originalFinding", "issueEvidence"]);
@@ -742,7 +786,7 @@ export function updateAction(actionId: string, updates: Partial<MyAction>, actor
     const baseline = updates.priority === action.priority ? action.priorityDueDate ?? action.dueDate : getPriorityDueDate(updates.priority);
     return updateActionInternal(actionId, { ...safeUpdates, priorityDueDate: baseline, dueDate: action.dueDateOverride ?? baseline });
   }
-  return updateActionInternal(actionId, safeUpdates);
+  return updateActionInternal(actionId, safeUpdates, actor);
 }
 
 /**
@@ -873,3 +917,27 @@ export function clearSavedActions() {
 }
 
 registerRecordCreationStore(STORAGE_KEY, () => { hasLoadedFromStorage = false; loadFromStorage(); });
+
+registerDeletionSource("action", id => { loadFromStorage(); const item = actions.find(item => item.id === id); return item ? { id: item.id, title: item.title, organizationId: "organizationId" in item && typeof item.organizationId === "string" ? item.organizationId : undefined, plant: item.plant, zone: item.area, aliases: [], linkedActionIds: [] } : undefined; });
+registerDeletionActionReader(() => { loadFromStorage(); return actions; });
+
+/** Reuse existing canonical transitions, with explicit revision/context and cooperating writer lock. */
+export async function executeV4ActionTransition(actionId: string, expected: NonNullable<ActionActor["v4Expectation"]>, input:
+  | { operation: "start"; actionType: MyActionType }
+  | { operation: "submit"; observation: string; correctiveActionCategory: string; costSaving: number }
+  | { operation: "undo"; observation: string; correctiveActionCategory: string; costSaving: number }
+  | { operation: "rework"; reason: string }
+  | { operation: "close"; reason: string }
+  | { operation: "save"; observation: string; correctiveActionCategory: string; costSaving: number }) {
+  return withV4ActionWrite(() => {
+    const actor = getAuthenticatedDemoActor(); if (!actor) throw new Error("Actual authenticated owner/reviewer required.");
+    const current = getActionById(actionId); if (!current || !isV4Action(current)) throw new Error("Versioned Audit task unavailable.");
+    const subject = { id: actor.user.id, name: actor.user.name, v4Expectation: expected };
+    if (input.operation === "start") return startAssignedAction(actionId, subject, input.actionType);
+    if (input.operation === "undo") return undoActionStart(actionId, subject, { observation: input.observation, category: input.correctiveActionCategory, costSaving: input.costSaving });
+    if (input.operation === "submit") return submitActionForReview(actionId, subject, input);
+    if (input.operation === "rework") return sendActionBack(actionId, subject, input.reason);
+    if (input.operation === "close") return closeReviewedAction(actionId, subject, input.reason);
+    return updateAction(actionId, { actionTakenDescription: input.observation, resolutionObservation: input.observation, correctiveActionCategory: input.correctiveActionCategory, costSaving: input.costSaving }, subject);
+  });
+}

@@ -1,7 +1,14 @@
 "use client";
+import { ScopedSettings } from "@/features/settings/scoped-settings";
+import { useAccessContext, isLegacyABCOperationalContext } from "@/features/five-s/administration/access-v4-context";
+import { useCurrentUser } from "@/lib/current-user";
+import { useAdminUsers } from "@/features/five-s/administration/store";
+import { useAccessV3State } from "@/features/five-s/administration/access-v3-state";
+import { canOpenAccessAdministration } from "@/features/five-s/administration/access-v3-store";
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import {
   ArrowRight,
   Bell,
@@ -65,16 +72,20 @@ const GROUPS: Group[] = [
   },
   {
     title: "Platform Administration",
-    description: "Manage organization-level platform access.",
+    description: "Manage factory-level platform access.",
     icon: ShieldCheck,
     access: "platform",
     items: [
-      { label: "Module Access", href: "/settings/module-access", description: "Control which OPS capabilities are available to each organization" },
+      { label: "Factory Module Access", href: "/settings/module-access", description: "Open Clients & subscriptions to configure each factory" },
     ],
   },
 ];
 
 export default function Page() {
+  useAccessV3State();
+  const { context, ready, error } = useAccessContext();
+  const identity = useCurrentUser();
+  const scopedPerson = useAdminUsers(true).find(p => p.id === identity.id)?.accessModel === "v3";
   const access = useSettingsAccess();
   const [search, setSearch] = useState("");
   const query = search.trim().toLowerCase();
@@ -93,6 +104,10 @@ export default function Page() {
     })
     .filter((group) => group.items.length > 0), [access.canManageConfiguration, access.canManageRoles, access.canViewUsers, access.isSuperAdmin, query]);
 
+  if (!ready) return <p role="status">Loading settings scope…</p>;
+  if (identity.role === "Client Administrator") redirect("/dashboard?view=administration");
+  if (error || scopedPerson || !isLegacyABCOperationalContext(context)) return <ScopedSettings />;
+
   return (
     <PageContainer>
       <FiveSPageHeader
@@ -101,6 +116,7 @@ export default function Page() {
         description="Configure organization structure, users, roles, and product preferences."
       />
 
+      {canOpenAccessAdministration() && <Link href="/settings/administration" className="block rounded-xl border bg-card p-4 outline-none hover:bg-muted/30 focus-visible:ring-2 focus-visible:ring-ring"><p className="font-semibold">Client & Factory Administration</p><p className="mt-1 text-sm text-muted-foreground">Manage assigned factories, people, Zone allocations and administration history.</p></Link>}
       <div className="relative max-w-md">
         <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
         <Input
@@ -159,7 +175,7 @@ export default function Page() {
         </div>
       )}
 
-      {!access.canViewUsers && !access.canManageConfiguration && (
+      {!access.canViewUsers && !access.canManageConfiguration && !canOpenAccessAdministration() && (
         <div className="flex items-center gap-2 rounded-lg border bg-muted/20 px-4 py-3 text-sm text-muted-foreground">
           <Bell className="size-4" />
           Administrative settings are hidden for your current role. Personal preferences remain available.

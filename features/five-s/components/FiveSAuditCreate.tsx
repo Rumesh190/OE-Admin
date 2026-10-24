@@ -1,4 +1,6 @@
 "use client";
+import { useAccessContext } from "@/features/five-s/administration/access-v4-context";
+import { useAccessV4State } from "@/features/five-s/administration/access-v4-state";
 import { OpsPersonSelect } from "@/components/ops/ops-person-select";
 
 import { useMemo, useState } from "react";
@@ -24,9 +26,16 @@ import {
 import { useI18n } from "@/components/preferences/use-i18n";
 import { useAdminUsers } from "@/features/five-s/administration/store";
 
-interface FiveSAuditCreateProps {
+import { useAccessV3State } from "../administration/access-v3-state";
+import { resolveCurrentFactoryActor } from "../administration/factory-authorization";
+import { getAllOrganizationConfiguration } from "@/lib/organization-store";
+import { DEMO_ORGANIZATION } from "@/lib/organizations";
+import { canScheduleAnyScopedAudit, eligibleAuditAssignees } from "@/lib/five-s/audit-authorization";
+
+export interface FiveSAuditCreateProps {
   onBack: () => void;
   onStart: (audit: {
+    organizationId?: string; plantId?: string; zoneId?: string; assignedAuditorId?: string; departmentId?: string; expectedContextSelectionId?: string;
     title: string;
     plant: string;
     department: string;
@@ -98,7 +107,12 @@ function SummaryItem({ label, value, mono = false }: { label: string; value: str
   );
 }
 
-export default function FiveSAuditCreate({ onBack, onStart }: FiveSAuditCreateProps) {
+export default function FiveSAuditCreate(props: FiveSAuditCreateProps) {
+  const current = useCurrentUser(); const people = useAdminUsers(true); useAccessV3State();
+  if (people.find(p => p.id === current.id)?.accessModel === "v3" || canScheduleAnyScopedAudit()) return <ScopedFiveSAuditCreate {...props}/>;
+  return <LegacyFiveSAuditCreate {...props}/>;
+}
+function LegacyFiveSAuditCreate({ onBack, onStart }: FiveSAuditCreateProps) {
   const { locale, t } = useI18n();
   const currentUser = useCurrentUser();
   const adminUser = useAdminUsers().find((user) => user.id === currentUser.id);
@@ -270,4 +284,31 @@ export default function FiveSAuditCreate({ onBack, onStart }: FiveSAuditCreatePr
       </div>
     </div>
   );
+}
+
+function ScopedFiveSAuditCreate({ onBack, onStart }: FiveSAuditCreateProps) {
+  const current = useCurrentUser(); useAccessV3State();
+  const { context: selectedContext } = useAccessContext(); const hierarchy = useAccessV4State(); const [departmentId, setDepartmentId] = useState("");
+  const catalog = getAllOrganizationConfiguration();
+  const factories = catalog.plants.filter(p => {
+    if (selectedContext && (selectedContext.kind !== "factory" || p.id !== selectedContext.plantId || (p.organizationId ?? DEMO_ORGANIZATION.id) !== selectedContext.organizationId)) return false;
+    if (current.isSuperAdmin) return selectedContext?.kind === "factory";
+    const actor = resolveCurrentFactoryActor({ organizationId: p.organizationId ?? DEMO_ORGANIZATION.id, plantId: p.id });
+    return Boolean(actor?.valid && (actor.clientAdmin || actor.factoryAdmin || actor.membership));
+  });
+  const plantId = factories[0]?.id ?? ""; const [zoneId, setZoneId] = useState(""); const [auditorId, setAuditorId] = useState("");
+  const plant = factories.find(p => p.id === plantId); const organizationId = plant?.organizationId ?? DEMO_ORGANIZATION.id;
+  const selectedActor = plantId && plant ? resolveCurrentFactoryActor({ organizationId: plant.organizationId ?? DEMO_ORGANIZATION.id, plantId }) : undefined;
+  const canSchedule = Boolean(current.isSuperAdmin || selectedActor?.factoryAdmin);
+  const [mode, setMode] = useState("now"); const [dueDate, setDueDate] = useState(() => { const date = new Date(); date.setDate(date.getDate() + 2); return toLocalInputDate(date); }); const [scheduledDate, setScheduledDate] = useState(""); const [scheduledTime, setScheduledTime] = useState(""); const [error, setError] = useState(""); const [pending, setPending] = useState(false);
+  const zones = catalog.zones.filter(z => z.plantId === plantId && z.status === "Active"); const zone = zones.find(z => z.id === zoneId);
+  const eligible = zone ? eligibleAuditAssignees({ organizationId, plantId, zoneId }) : [];
+  const title = plant && zone ? getNextFiveSAuditTitle(plant.name, zone.name) : `${plant?.name ?? "Selected factory"} · Select Zone`;
+  return <div className="mx-auto grid w-full max-w-4xl gap-5 p-4 sm:p-6"><FiveSPageHeader title={canSchedule ? "Create 5S Audit" : "Start Audit"} description={title} actions={<Button variant="outline" onClick={onBack}>Cancel</Button>}/>
+  {!factories.length ? <p role="alert">An active factory membership is required to start an Audit.</p> : <form className="grid gap-5" onSubmit={async e => { e.preventDefault(); if (!plant || !zone || pending) return; setPending(true); setError(""); try { if (!dueDate || dueDate < toLocalInputDate(new Date())) throw new Error("Select a valid due date."); if (mode === "schedule") { const invalid = validateFiveSAuditSchedule(scheduledDate, scheduledTime); if (invalid) throw new Error(invalid); if (!eligible.some(p => p.id === auditorId)) throw new Error("Select an eligible auditor."); } await onStart({ organizationId, plantId, zoneId, departmentId: departmentId || undefined, expectedContextSelectionId: selectedContext?.selectionId, assignedAuditorId: mode === "now" ? current.id : auditorId, title, plant: plant.name, department: zone.department, area: zone.name, auditor: mode === "now" ? current.name : eligible.find(p => p.id === auditorId)!.name, dueDate, startNow: mode === "now", scheduledDate: mode === "schedule" ? scheduledDate : undefined, scheduledTime: mode === "schedule" ? scheduledTime : undefined }); } catch(e) { setError(e instanceof Error ? e.message : "Unable to create Audit."); } finally { setPending(false); } }}>
+  <OpsPersonSelect label="Zone" entityLabel="Zone" entityPlural="Zones" clearable={false} value={zoneId} people={zones} onValueChange={id => { setZoneId(id); setAuditorId(""); setDepartmentId(""); }}/>
+  {organizationId !== DEMO_ORGANIZATION.id && <><OpsPersonSelect label="Canonical Department (optional)" entityLabel="Department" entityPlural="Departments" value={departmentId} people={hierarchy.departments.filter(d => d.organizationId === organizationId && d.plantId === plantId && d.zoneId === zoneId && d.status === "Active")} onValueChange={setDepartmentId}/><p className="text-sm text-muted-foreground">Without an explicit Department, corrective Action owner eligibility is unavailable; no Department is fabricated.</p></>}
+  {canSchedule && <div className="flex flex-wrap gap-2"><Button type="button" variant={mode === "now" ? "default" : "outline"} onClick={() => setMode("now")}>Start now</Button><Button type="button" variant={mode === "schedule" ? "default" : "outline"} onClick={() => setMode("schedule")}>Schedule for auditor</Button></div>}
+  {mode === "schedule" && <><OpsPersonSelect label="Assigned auditor" entityLabel="Auditor" entityPlural="Auditors" clearable={false} value={auditorId} people={eligible} onValueChange={setAuditorId}/>{zone && !eligible.length && <p role="status" className="text-sm text-muted-foreground">No eligible auditor for this Zone. Grant authorization to an active Zone Leader who does not lead this Zone before scheduling.</p>}<label className="grid gap-2 text-sm">Scheduled Date<Input aria-label="Scheduled Date" type="date" value={scheduledDate} onChange={e => setScheduledDate(e.target.value)}/></label><label className="grid gap-2 text-sm">Scheduled Time<Input aria-label="Scheduled Time" type="time" value={scheduledTime} onChange={e => setScheduledTime(e.target.value)}/></label></>}
+  <label className="grid gap-2 text-sm">Due Date<Input aria-label="Due Date" type="date" value={dueDate} onChange={e => setDueDate(e.target.value)}/></label>{error && <p role="alert" className="text-sm text-destructive">{error}</p>}<Button disabled={pending || !zone || (mode === "schedule" && !eligible.some(p => p.id === auditorId))} type="submit">{pending ? "Saving…" : mode === "schedule" ? "Schedule Audit" : "Start Audit"}</Button></form>}</div>;
 }

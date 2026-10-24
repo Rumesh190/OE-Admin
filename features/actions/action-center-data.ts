@@ -10,7 +10,7 @@ import {
   isActionOverdue,
 } from "@/lib/actions/action-config";
 
-export type ActionCenterTab = "my-actions" | "created-by-me" | "team-actions" | "awaiting-review" | "completed";
+export type ActionCenterTab = "all" | "my-actions" | "created-by-me" | "team-actions" | "awaiting-review" | "completed";
 export type ActionStatusFilter = "All" | "Open" | "Overdue" | MyActionStatus;
 export type ActionDueFilter = "All" | "Overdue" | "Today" | "Tomorrow" | "Next 7 days";
 export type ActionQuickFilter = "open" | "overdue";
@@ -27,6 +27,7 @@ export interface ActionCenterFilters {
 }
 
 export const ACTION_CENTER_TABS: ReadonlyArray<{ id: ActionCenterTab; label: string }> = [
+  { id: "all", label: "All" },
   { id: "my-actions", label: "My Actions" },
   { id: "created-by-me", label: "Created by Me" },
   { id: "team-actions", label: "Team Actions" },
@@ -61,8 +62,9 @@ export function getRoleVisibleActions(actions: MyAction[], user: DemoUser, admin
 
 export function getActionsForTab(actions: MyAction[], tab: ActionCenterTab, user: DemoUser, adminUser?: AdminUser) {
   const visible = getRoleVisibleActions(actions, user, adminUser);
-  if (tab === "my-actions") return visible.filter((action) => isResponsible(action, user) && action.status !== "Completed");
-  if (tab === "created-by-me") return visible.filter((action) => isCreator(action, user) && action.status !== "Completed");
+  if (tab === "all") return visible;
+  if (tab === "my-actions") return visible.filter((action) => isResponsible(action, user));
+  if (tab === "created-by-me") return visible.filter((action) => isCreator(action, user));
   if (tab === "team-actions") return canViewTeamActions(adminUser) ? visible.filter((action) => action.status !== "Completed") : [];
   if (tab === "awaiting-review") return visible.filter((action) => isReviewer(action, user, adminUser) && ACTION_REVIEW_STATUSES.includes(action.status));
   return visible.filter((action) => action.status === "Completed");

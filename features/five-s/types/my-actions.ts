@@ -1,3 +1,4 @@
+import type { WorkCapacitySnapshot, VerifierSelectionSnapshot, VerifierReplacementHistoryEvent } from "../administration/access-v4-models";
 export type MyActionType = "immediate" | "corrective";
 
 export type MyActionStatus =
@@ -138,6 +139,16 @@ export interface VisualManagementActionSource {
 }
 
 export interface MyAction {
+  policyVersion?: "ops-access-v4";
+  organizationId?: string;
+  plantId?: string;
+  departmentId?: string;
+  v4?: {
+    version: 1; revision: number; workCapacity: WorkCapacitySnapshot;
+    verifierSelection?: VerifierSelectionSnapshot;
+    verifierHistory: VerifierReplacementHistoryEvent[];
+    actualCompleterIds: string[];
+  };
   id: string;
 
   /** Stable audit link for newly created actions; legacy records use sourceTitle. */

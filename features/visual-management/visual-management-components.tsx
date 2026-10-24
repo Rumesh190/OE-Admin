@@ -15,19 +15,24 @@ import { useAdminUsers } from "@/features/five-s/administration/store";
 import { cn } from "@/lib/utils";
 import { formatOpsDate, formatOpsDateTime } from "@/lib/ops-formatters";
 import { useCurrentUser } from "@/lib/current-user";
-import { visibleVisualManagementBoards } from "./visual-management-access";
+import { visibleVisualManagementBoards, visibleVisualManagementMeetings } from "./visual-management-access";
 import { useVisualManagementStore } from "./visual-management-store";
 import type { VisualManagementBoard, VisualManagementEscalationStatus, VisualManagementKpiStatus, VisualManagementMeetingStatus } from "./types";
 
-export function VisualManagementNav() {
+export function VisualManagementNav({ active: selected }: { active?: string } = {}) {
   const pathname = usePathname();
+  const state = useVisualManagementStore();
+  const user = useCurrentUser();
+  const admin = useAdminUsers().find(item => item.id === user.id);
+  const boardCount = visibleVisualManagementBoards(state.boards, user, admin?.roles).length;
+  const meetingCount = visibleVisualManagementMeetings(state.meetings, state.boards, user, admin?.roles).length;
   const items = [
-    { id: "overview", label: "Overview", href: "/visual-management" },
-    { id: "boards", label: "Boards", href: "/visual-management/boards" },
-    { id: "meetings", label: "Meetings", href: "/visual-management/meetings" },
+    { id: "overview", label: "Overview", href: "/visual-management?tab=overview" },
+    { id: "boards", label: "All Boards", count: boardCount, href: "/visual-management/boards" },
+    { id: "meetings", label: "All Meetings", count: meetingCount, href: "/visual-management/meetings" },
     { id: "settings", label: "Settings", href: "/visual-management/settings" },
   ];
-  const active = items.find((item) => item.href !== "/visual-management" && pathname.startsWith(item.href))?.id ?? "overview";
+  const active = selected ?? items.find((item) => item.id !== "overview" && pathname.startsWith(item.href))?.id ?? "boards";
   return <OpsTabBar label="Visual Management sections" tabs={items} active={active} />;
 }
 

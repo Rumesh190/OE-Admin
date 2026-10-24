@@ -39,7 +39,7 @@ export default function ContinuousImprovementNewPage() {
   const zoneConfiguration = useFiveSZoneConfiguration();
   const adminUser = adminUsers.find((user) => user.id === currentUser.id);
   const currentPlant = adminUser?.plant ?? currentUser.plant;
-  const hasBroadScope = Boolean(adminUser?.roles.includes("Admin"));
+  const hasBroadScope = canCreateImprovement(adminUser, currentUser);
   const availableZones = hasBroadScope ? zoneConfiguration : zoneConfiguration.filter((item) => adminUser?.zoneMemberships.some((membership) => membership.zone === item.name));
   const meetingReference = searchParams.get("meetingId");
   const requestedZone = searchParams.get("zone");

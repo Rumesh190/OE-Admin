@@ -243,15 +243,19 @@ function ResolvedRecordList({records,unavailable,compact,className,hideHeading=f
     <div className="grid min-w-0 grid-cols-1 divide-y">
       {records.map(({record,relationship})=>{
         const Icon=MODULE_ICONS[record.ref.module];
-        const RecordLink=record.ref.module==='action'?ActionLink:Link;
+        const RecordLink=record.deleted?DeletedRecordReference:record.ref.module==='action'?ActionLink:Link;
         return <RecordLink key={`${record.ref.module}:${record.ref.recordId}:${record.ref.childId??''}`} href={record.href} className={cn('group flex min-w-0 items-start gap-3 outline-none transition-colors hover:bg-muted/30 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring',compact?'py-3':'px-4 py-3 sm:px-5')}>
           <span className="mt-0.5 grid size-9 shrink-0 place-items-center rounded-lg bg-primary/5 text-primary"><Icon className="size-4" /></span>
           <span className="min-w-0 flex-1"><span className="flex min-w-0 flex-wrap items-center gap-2"><span className="text-xs font-medium">{getModuleDisplayName(record.ref.module)}</span>{record.status&&<Badge variant="secondary" size="sm" className="max-w-full whitespace-normal break-words">{record.status}</Badge>}</span><span className="mt-1 block break-words text-sm font-medium">{record.title}</span><span className="mt-1 block break-all font-mono text-xs text-muted-foreground">{record.ref.childId??record.ref.recordId}</span><span className="mt-1 block text-xs text-muted-foreground">{RELATIONSHIP_LABELS[relationship]}</span></span>
-          <ArrowRight aria-hidden className="mt-2 size-4 shrink-0 text-muted-foreground group-hover:text-primary" />
+          {!record.deleted && <ArrowRight aria-hidden className="mt-2 size-4 shrink-0 text-muted-foreground group-hover:text-primary" />}
         </RecordLink>;
       })}
       {!records.length&&<p className={cn('text-sm text-muted-foreground',compact?'py-3':'px-4 py-5 sm:px-5')}>No accessible linked records.</p>}
     </div>
     {unavailable&&<p className={cn('text-xs text-muted-foreground',compact?'pt-2':'border-t px-4 py-3 sm:px-5')}>Some linked records are unavailable or outside your access.</p>}
   </section>;
+}
+
+function DeletedRecordReference({ children, className }: { children: React.ReactNode; className?: string; href?: string }) {
+  return <div className={className}>{children}</div>;
 }

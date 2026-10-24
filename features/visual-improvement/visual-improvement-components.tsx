@@ -1,6 +1,7 @@
 "use client";
 /* eslint-disable @next/next/no-img-element -- uploaded evidence uses dynamic data URLs and existing local evidence assets. */
 
+import { OpsTabBar } from "@/components/ops/ops-tabs";
 import { useRef, useState } from "react";
 import Link from "next/link";
 import { ArrowRight, Camera, CheckCircle2, Clock3, FileEdit, ImageIcon, Link2, RotateCcw, Trash2, Upload } from "lucide-react";
@@ -33,11 +34,7 @@ export function VisualImprovementTabs({ tabs, active, onChange, label = "Visual 
   onChange: (id: string) => void;
   label?: string;
 }) {
-  return <nav aria-label={label} className="flex min-w-0 gap-0 overflow-x-auto border-b pb-px sm:gap-1">
-    {tabs.map((tab) => <button key={tab.id} type="button" onClick={() => onChange(tab.id)} className={cn("relative flex h-10 shrink-0 items-center gap-1.5 px-2 text-xs font-medium text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring sm:px-3 sm:text-sm", active === tab.id && "text-foreground after:absolute after:inset-x-2 after:bottom-[-1px] after:h-0.5 after:rounded-full after:bg-primary")}>
-      {tab.label}{typeof tab.count === "number" && <span className={cn("rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-semibold tabular-nums", active === tab.id && "bg-primary/10 text-primary")}>{tab.count}</span>}
-    </button>)}
-  </nav>;
+  return <OpsTabBar tabs={tabs} active={active} onChange={onChange} label={label} />;
 }
 
 export function VisualEvidencePicker({ items, onChange, uploadedBy, label = "Add photos", required = false }: {

@@ -15,5 +15,5 @@ export const PERMISSION_GROUPS = {
 export type PermissionCode = typeof PERMISSION_GROUPS[keyof typeof PERMISSION_GROUPS][number];
 export type ZoneResponsibility = "Leader"|"Member"|"Auditor"|"Viewer";
 export interface AdminZoneMembership { zone:string; responsibility:ZoneResponsibility }
-export interface AdminUser { id:string; employeeId:string; name:string; email:string; plant:string; status:AdminUserStatus; roles:AdminRole[]; zoneMemberships:AdminZoneMembership[]; permissions:PermissionCode[]; updatedAt:string }
+export interface AdminUser { accessModel?: "v3"; id:string; employeeId:string; name:string; email:string; plant:string; status:AdminUserStatus; roles:AdminRole[]; zoneMemberships:AdminZoneMembership[]; permissions:PermissionCode[]; updatedAt:string }
 export type AdminUserInput = Omit<AdminUser,"id"|"updatedAt">;

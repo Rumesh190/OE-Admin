@@ -1,5 +1,5 @@
 "use client";
-import Link from 'next/link';
+import Link from './ops-record-link';
 import { ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { OpsFeedback } from './ops-feedback';

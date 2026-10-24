@@ -1,6 +1,8 @@
 import { getAdminUser } from "@/features/five-s/administration/store";
 import { getDeploymentRecipients } from "./gemba-deployment";
 import type { GembaObservation, GembaState, GembaWalk } from "./types";
+import { hasPlatformLegacyOperationalAccess } from "@/lib/platform-operational-access";
+import { canCreateDemoModuleRecord } from "@/lib/demo/demo-module-creation";
 
 export interface GembaAccessUser {
   id: string;
@@ -10,7 +12,7 @@ export interface GembaAccessUser {
 
 export function canConductGembaWalk(roles: readonly string[] | undefined, user?: GembaAccessUser) {
   const configured = user ? getAdminUser(user.id) : undefined;
-  return !user?.isSuperAdmin && configured?.status === "Active" && Boolean(configured.roles.some((role) => role === "Admin" || role === "Auditor"));
+  return Boolean((user && canCreateDemoModuleRecord("gemba", user.id)) || (user?.isSuperAdmin && hasPlatformLegacyOperationalAccess("gemba")) || (configured?.status === "Active" && configured.roles.some((role) => role === "Admin" || role === "Auditor")));
 }
 
 export function canViewGembaWalk(walk: GembaWalk, user: GembaAccessUser, roles: readonly string[] | undefined) {
@@ -29,7 +31,7 @@ export function visibleGembaWalks(walks: GembaWalk[], user: GembaAccessUser, rol
 
 export function canMutateGembaWalk(walk: Pick<GembaWalk, "plant">, actor: { id: string } | undefined) {
   const user = actor ? getAdminUser(actor.id) : undefined;
-  return Boolean(user?.status === "Active" && user.id !== "USR-OPS-SUPER-ADMIN" && user.roles.some(role => role === "Admin" || role === "Auditor") && (user.plant === walk.plant || user.plant === "All organizations"));
+  return Boolean((actor && canCreateDemoModuleRecord("gemba", actor.id)) || hasPlatformLegacyOperationalAccess("gemba", walk.plant) || (user?.status === "Active" && user.id !== "USR-OPS-SUPER-ADMIN" && user.roles.some(role => role === "Admin" || role === "Auditor") && (user.plant === walk.plant || user.plant === "All organizations")));
 }
 
 /** Current leadership plus retained Zone relationships grant observation-only access. */

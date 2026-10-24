@@ -1,4 +1,5 @@
 "use client";
+import { RecordDeletionMenu } from "@/components/ops/record-deletion-menu";
 
 import { getRedTagCreationError } from "@/features/five-s/red-tag/access";
 import { useAdminUsers } from "@/features/five-s/administration/store";
@@ -83,7 +84,7 @@ export function ObservationCard({ observation, action, onEdit, onCreateAction, o
       <div className={cn("flex min-w-0 items-start gap-3", compact ? "p-3" : "p-4")}>
         {observation.evidence[0] ? <button type="button" onClick={() => setPreview(observation.evidence[0])} className="relative size-16 shrink-0 overflow-hidden rounded-lg border bg-muted outline-none focus-visible:ring-2 focus-visible:ring-ring sm:size-[72px]" aria-label={`Preview ${observation.evidence[0].name}`}><GembaEvidenceImage evidence={observation.evidence[0]} className="size-full object-cover" />{observation.evidence.length > 1 && <span className="absolute bottom-1 right-1 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-medium text-white">+{observation.evidence.length - 1}</span>}</button> : <span className="grid size-16 shrink-0 place-items-center rounded-lg border border-dashed bg-muted/20 text-muted-foreground sm:size-[72px]"><ImageIcon className="size-5" /></span>}
         <div className="min-w-0 flex-1">
-          <div className="flex min-w-0 flex-wrap items-center gap-2"><ObservationTypeBadge type={observation.type} /><span className="font-mono text-[10px] text-muted-foreground">{observation.id.split("-").slice(-2).join("-")}</span></div>
+          <div className="flex min-w-0 flex-wrap items-center gap-2"><RecordDeletionMenu module="gembaObservation" recordId={observation.id} /><ObservationTypeBadge type={observation.type} /><span className="font-mono text-[10px] text-muted-foreground">{observation.id.split("-").slice(-2).join("-")}</span></div>
           <h3 className="mt-2 line-clamp-2 text-sm font-semibold leading-5">{observation.title}</h3>
           {!compact && <p className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">{observation.description}</p>}
           <div className="mt-2 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground"><span className="inline-flex min-w-0 items-center gap-1"><MapPin className="size-3 shrink-0" /><span className="truncate">{observation.location}</span></span><span>{observation.evidence.length} photo{observation.evidence.length === 1 ? "" : "s"}</span>{observation.horizontalDeployment?.enabled && <span className="inline-flex items-center gap-1 text-primary"><Share2 className="size-3" />Horizontal Deployment · {observation.horizontalDeployment.targetZoneIds.length} zone{observation.horizontalDeployment.targetZoneIds.length === 1 ? "" : "s"}</span>}</div>

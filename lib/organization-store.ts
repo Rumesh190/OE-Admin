@@ -1,12 +1,16 @@
 "use client";
+import { readAdministrationPayload } from "@/lib/administration-storage";
 
-import { useSyncExternalStore } from "react";
+import { useMemo, useSyncExternalStore } from "react";
+
+import { DEMO_ORGANIZATION } from "@/lib/organizations";
 
 import { safeSetStorage } from "@/lib/browser-storage";
 
 export type OrganizationStatus = "Active" | "Inactive";
 
 export interface OrganizationPlant {
+  organizationId?: string;
   id: string;
   name: string;
   code: string;
@@ -16,9 +20,18 @@ export interface OrganizationPlant {
   status: OrganizationStatus;
   description?: string;
   codeLocked: boolean;
+  /** Explicit factory login capacity. Undefined legacy records remain readable but cannot add active users. */
+  maximumActiveUsers?: number;
+  /** Marks a factory that may be permanently removed when it has no dependencies or history. */
+  demoDataset?: { id: "ops-iq-v4-demo-v1"; disposable: true; generatedAt: string; authorizedBy: "product-owner" };
 }
 
 export interface OrganizationZone {
+  /** Additive v4 records keep the legacy string empty until independent Departments exist. */
+  accessModel?: "v4";
+  organizationId?: string;
+  codeApprovedBy?: string;
+  codeApprovedAt?: string;
   id: string;
   name: string;
   code: string;
@@ -47,6 +60,7 @@ export const ORGANIZATION_PLANT_SEEDS: readonly OrganizationPlant[] = [
     status: "Active",
     description: "Primary OPS manufacturing site",
     codeLocked: true,
+    maximumActiveUsers: 20,
   },
 ] as const;
 
@@ -98,7 +112,7 @@ function load() {
   if (loaded || typeof window === "undefined") return;
   loaded = true;
   try {
-    const parsed = JSON.parse(window.localStorage.getItem(STORAGE_KEY) ?? "null") as Partial<OrganizationState> | null;
+    const parsed = JSON.parse(readAdministrationPayload(STORAGE_KEY) ?? "null") as Partial<OrganizationState> | null;
     if (parsed && Array.isArray(parsed.plants) && Array.isArray(parsed.zones)) {
       state = { plants: parsed.plants, zones: parsed.zones };
     }
@@ -120,11 +134,14 @@ function persist(next: OrganizationState) {
 }
 
 export function useOrganizationConfiguration() {
-  return useSyncExternalStore(subscribe, snapshot, () => SERVER_STATE);
+  const current = useSyncExternalStore(subscribe, snapshot, () => SERVER_STATE);
+  return useMemo(() => { const plants = current.plants.filter(item => !item.organizationId || item.organizationId === DEMO_ORGANIZATION.id); const ids = new Set(plants.map(item => item.id)); return { plants, zones: current.zones.filter(item => ids.has(item.plantId)) }; }, [current]);
 }
 
-export function getOrganizationPlants() { load(); return state.plants; }
-export function getOrganizationZones() { load(); return state.zones; }
+export function getAllOrganizationConfiguration() { load(); return state; }
+export function refreshOrganizationConfiguration() { loaded = false; load(); listeners.forEach(listener => listener()); }
+export function getOrganizationPlants() { load(); return state.plants.filter(item => !item.organizationId || item.organizationId === DEMO_ORGANIZATION.id); }
+export function getOrganizationZones() { load(); const ids = new Set(getOrganizationPlants().map(item => item.id)); return state.zones.filter(item => ids.has(item.plantId)); }
 export function getOrganizationPlant(idOrName: string) { return getOrganizationPlants().find((plant) => plant.id === idOrName || plant.name === idOrName); }
 export function getOrganizationZone(idOrName: string) { return getOrganizationZones().find((zone) => zone.id === idOrName || zone.name === idOrName); }
 

@@ -1,12 +1,15 @@
 "use client";
+import { RecordDeletionMenu } from "@/components/ops/record-deletion-menu";
 
+import { useListingFilter } from "@/lib/navigation/use-listing-filter";
+import { useUrlState } from "@/lib/navigation/use-url-state";
 import { newestCreatedFirst, compareNewestCreated, compareOldestCreated } from "@/lib/records/record-order";
 
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { ArrowRight, BarChart3, Plus, Search, Sparkles } from "lucide-react";
-import { PageContainer } from "@/components/layout/page-container";
+import { OpsListingLayout as PageContainer } from "@/components/ops/ops-listing";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -28,7 +31,7 @@ type DateFilter = "All dates" | "This Month" | "Last 30 Days";
 type SavingFilter = "Any benefit" | "With saving" | "Non-financial";
 
 function validTab(value?: string): LandingTab {
-  return (["overview", "improvements", "gallery", "awaiting-review", "completed"] as LandingTab[]).includes(value as LandingTab) ? value as LandingTab : "overview";
+  return (["overview", "improvements", "gallery", "awaiting-review", "completed"] as LandingTab[]).includes(value as LandingTab) ? value as LandingTab : "improvements";
 }
 
 export default function VisualImprovementPage({ initialTab, initialStatus }: { initialTab?: string; initialStatus?: string }) {
@@ -36,7 +39,9 @@ export default function VisualImprovementPage({ initialTab, initialStatus }: { i
   const adminUser = useAdminUsers().find((user) => user.id === currentUser.id);
   const all = useVisualImprovements();
   const visible = useMemo(() => all.filter((item) => canViewVisualImprovement(adminUser, currentUser, item)), [adminUser, all, currentUser]);
-  const [active, setActive] = useState<LandingTab>(() => validTab(initialTab));
+  const url = useUrlState();
+  const active = validTab(url.params.get("tab") ?? initialTab);
+  const setActive = (value: LandingTab) => url.update({ tab: value, status: "All" }, "push");
   const mayCreate = canCreateVisualImprovement(adminUser, currentUser);
   const summary = getVisualImprovementSummary(visible);
   const awaiting = visible.filter((item) => item.status === "Awaiting Review");
@@ -46,6 +51,14 @@ export default function VisualImprovementPage({ initialTab, initialStatus }: { i
   return <PageContainer className="max-w-none">
     <FiveSPageHeader eyebrow="OPS Workspace" title="Visual Improvement" description="Capture workplace improvements through clear before-and-after evidence." actions={mayCreate ? <Button nativeButton={false} render={<Link href="/visual-improvement/new" />}><Plus className="size-4" />Add Visual Improvement</Button> : undefined} />
 
+    <VisualImprovementTabs active={active} onChange={(value) => setActive(value as LandingTab)} tabs={[
+      { id: "overview", label: "Overview" },
+      { id: "improvements", label: "All", count: visible.length },
+      { id: "gallery", label: "Gallery", count: completed.length },
+      { id: "awaiting-review", label: "Awaiting Review", count: awaiting.length },
+      { id: "completed", label: "Completed", count: completed.length },
+    ]} />
+
     <section aria-label="Visual Improvement summary" className="grid grid-cols-2 overflow-hidden rounded-xl border bg-card shadow-sm sm:grid-cols-5">
       <Metric label="Active Improvements" value={String(summary.active)} tone="info" />
       <Metric label="Completed This Month" value={String(summary.completedThisMonth)} tone="success" />
@@ -54,13 +67,7 @@ export default function VisualImprovementPage({ initialTab, initialStatus }: { i
       <Metric label="Areas Improved" value={String(summary.areasImproved)} tone="info" />
     </section>
 
-    <VisualImprovementTabs active={active} onChange={(value) => setActive(value as LandingTab)} tabs={[
-      { id: "overview", label: "Overview" },
-      { id: "improvements", label: "Improvements", count: visible.length },
-      { id: "gallery", label: "Gallery", count: completed.length },
-      { id: "awaiting-review", label: "Awaiting Review", count: awaiting.length },
-      { id: "completed", label: "Completed", count: completed.length },
-    ]} />
+
 
     {active === "overview" && <VisualOverview records={visible} mayCreate={mayCreate} />}
     {active === "improvements" && <ImprovementLibrary records={visible} initialStatus={initialStatusValue} mayCreate={mayCreate} />}
@@ -105,19 +112,19 @@ function Gallery({ records }: { records: VisualImprovement[] }) {
 }
 
 function ImprovementLibrary({ records, initialStatus, mayCreate, compactFilters = false }: { records: VisualImprovement[]; initialStatus: VisualImprovementStatus | "All"; mayCreate: boolean; compactFilters?: boolean }) {
-  const [search, setSearch] = useState("");
-  const [status, setStatus] = useState<VisualImprovementStatus | "All">(initialStatus);
-  const [plant, setPlant] = useState("All");
-  const [zone, setZone] = useState("All");
-  const [category, setCategory] = useState("All");
-  const [owner, setOwner] = useState("All");
-  const [date, setDate] = useState<DateFilter>("All dates");
-  const [saving, setSaving] = useState<SavingFilter>("Any benefit");
-  const [sort, setSort] = useState<SortMode>("Newest");
-  const filtered = sortRecords(filterRecords(records, { search, status, plant, zone, category, owner, date, saving }), sort);
-  return <Card className="min-w-0 gap-0 overflow-hidden"><CardContent className="grid gap-2 border-b p-3"><div className="grid gap-2 md:grid-cols-[minmax(220px,1fr)_180px_190px]"><div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input className="pl-9" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search improvements, owners, or locations..." /></div>{!compactFilters ? <CompactSelect value={status} onChange={(value) => setStatus(value as VisualImprovementStatus | "All")} all="All statuses" allValue="All" options={VISUAL_IMPROVEMENT_STATUSES} /> : <div className="hidden md:block" />}<CompactSelect value={sort} onChange={(value) => setSort(value as SortMode)} all="Newest" options={["Oldest", "Highest Saving", "Recently Completed"]} /></div>{!compactFilters && <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-6"><CompactSelect value={plant} onChange={setPlant} all="All plants" allValue="All" options={unique(records.map((item) => item.plant))} /><CompactSelect value={zone} onChange={setZone} all="All zones" allValue="All" options={unique(records.filter((item) => plant === "All" || item.plant === plant).map((item) => item.zone))} /><CompactSelect value={category} onChange={setCategory} all="All categories" allValue="All" options={VISUAL_IMPROVEMENT_CATEGORIES} /><CompactSelect value={owner} onChange={setOwner} all="All owners" allValue="All" options={unique(records.map((item) => item.ownerName))} /><CompactSelect value={date} onChange={(value) => setDate(value as DateFilter)} all="All dates" options={["This Month", "Last 30 Days"]} /><CompactSelect value={saving} onChange={(value) => setSaving(value as SavingFilter)} all="Any benefit" options={["With saving", "Non-financial"]} /></div>}</CardContent>
-    <div className="grid gap-3 p-3 lg:hidden">{filtered.map((item) => <Link href={`/visual-improvement/${encodeURIComponent(item.id)}`} key={item.id} className="rounded-xl border bg-background p-4 outline-none focus-visible:ring-2 focus-visible:ring-ring"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="font-mono text-[11px] font-semibold text-primary">{item.id}</p><p className="mt-1 line-clamp-2 text-sm font-semibold">{item.title}</p></div><VisualImprovementStatusBadge status={item.status} /></div><p className="mt-3 text-xs text-muted-foreground">{item.plant} · {item.zone} · {item.ownerName}</p><div className="mt-3 flex items-center justify-between gap-3 border-t pt-3 text-xs"><Badge variant="secondary">{item.category}</Badge><span className="font-semibold text-emerald-700 dark:text-emerald-400">{formatBenefit(item)}</span></div></Link>)}</div>
-    <div className="hidden overflow-x-auto lg:block"><table className="w-full min-w-[1160px] text-sm"><thead className="border-b bg-muted/25 text-left text-[10px] uppercase tracking-wide text-muted-foreground"><tr><th className="px-4 py-3">Improvement</th><th className="px-4 py-3">Plant / Zone</th><th className="px-4 py-3">Category</th><th className="px-4 py-3">Owner</th><th className="px-4 py-3">Created</th><th className="px-4 py-3">Benefit</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Updated</th><th className="px-4 py-3 text-right">Actions</th></tr></thead><tbody className="divide-y divide-border/65">{filtered.map((item) => <tr key={item.id} className="hover:bg-muted/25"><td className="max-w-xs px-4 py-3"><Link href={`/visual-improvement/${encodeURIComponent(item.id)}`} className="block truncate text-xs font-semibold hover:text-primary hover:underline">{item.title}</Link><span className="mt-0.5 block font-mono text-[10px] text-muted-foreground">{item.id}</span></td><td className="px-4 py-3"><p className="text-xs font-medium">{item.plant}</p><p className="mt-0.5 text-[11px] text-muted-foreground">{item.zone}</p></td><td className="px-4 py-3"><Badge variant="secondary">{item.category}</Badge></td><td className="px-4 py-3 text-xs">{item.ownerName}</td><td className="whitespace-nowrap px-4 py-3 text-xs">{formatVisualDate(item.createdAt)}</td><td className="whitespace-nowrap px-4 py-3 text-xs font-medium">{formatBenefit(item)}</td><td className="px-4 py-3"><VisualImprovementStatusBadge status={item.status} /></td><td className="whitespace-nowrap px-4 py-3 text-xs text-muted-foreground">{formatVisualDate(item.updatedAt)}</td><td className="px-4 py-3 text-right"><Button size="sm" variant="ghost" nativeButton={false} render={<Link href={`/visual-improvement/${encodeURIComponent(item.id)}`} />}>View<ArrowRight className="size-3.5" /></Button></td></tr>)}</tbody></table></div>
+  const [search, setSearch] = useListingFilter<string>("search", "");
+  const [status, setStatus] = useListingFilter<VisualImprovementStatus | "All">("status", initialStatus);
+  const [plant, setPlant] = useListingFilter<string>("plant", "All");
+  const [zone, setZone] = useListingFilter<string>("zone", "All");
+  const [category, setCategory] = useListingFilter<string>("category", "All");
+  const [owner, setOwner] = useListingFilter<string>("owner", "All");
+  const [date, setDate] = useListingFilter<DateFilter>("date", "All dates");
+  const [saving, setSaving] = useListingFilter<SavingFilter>("saving", "Any benefit");
+  const [sort, setSort] = useListingFilter<SortMode>("sort", "Newest");
+  const filtered = sortRecords(filterRecords(records, { search, status: compactFilters ? "All" : status, plant, zone, category, owner, date, saving }), sort);
+  return <Card className="min-w-0 gap-0 overflow-hidden"><CardContent className="grid gap-2 border-b p-3"><div className="grid gap-2 md:grid-cols-[minmax(220px,1fr)_180px_190px]"><div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input className="pl-9" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search improvements, owners, or locations..." /></div>{!compactFilters ? <CompactSelect value={status} onChange={(value) => setStatus(value as VisualImprovementStatus | "All")} all="All statuses" allValue="All" options={VISUAL_IMPROVEMENT_STATUSES} /> : <div className="hidden md:block" />}<CompactSelect value={sort} onChange={(value) => setSort(value as SortMode)} all="Newest" options={["Oldest", "Highest Saving", "Recently Completed"]} /></div>{!compactFilters && <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-6"><CompactSelect value={plant} onChange={setPlant} all="All plants" allValue="All" options={unique(records.map((item) => item.plant))} /><CompactSelect value={zone} onChange={setZone} all="All zones" allValue="All" options={unique(records.filter((item) => plant === "All" || item.plant === plant).map((item) => item.zone))} /><CompactSelect value={category} onChange={setCategory} all="All categories" allValue="All" options={VISUAL_IMPROVEMENT_CATEGORIES} /><CompactSelect value={owner} onChange={setOwner} all="All owners" allValue="All" options={unique(records.map((item) => item.ownerName))} /><CompactSelect value={date} onChange={(value) => setDate(value as DateFilter)} all="All dates" options={["This Month", "Last 30 Days"]} /><CompactSelect value={saving} onChange={(value) => setSaving(value as SavingFilter)} all="Any benefit" options={["With saving", "Non-financial"]} /></div>}{(search || status !== "All" || plant !== "All" || zone !== "All" || category !== "All" || owner !== "All" || date !== "All dates" || saving !== "Any benefit" || sort !== "Newest") && <Button className="w-fit" variant="ghost" onClick={() => { setSearch(""); setStatus("All"); setPlant("All"); setZone("All"); setCategory("All"); setOwner("All"); setDate("All dates"); setSaving("Any benefit"); setSort("Newest"); }}>Clear Filters</Button>}</CardContent>
+    <div className="grid gap-3 p-3 lg:hidden">{filtered.map((item) => <article key={item.id} className="min-w-0 rounded-xl border bg-background"><Link href={`/visual-improvement/${encodeURIComponent(item.id)}`} className="block p-4 outline-none focus-visible:ring-2 focus-visible:ring-ring"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="font-mono text-[11px] font-semibold text-primary">{item.id}</p><p className="mt-1 line-clamp-2 text-sm font-semibold">{item.title}</p></div><VisualImprovementStatusBadge status={item.status} /></div><p className="mt-3 text-xs text-muted-foreground">{item.plant} · {item.zone} · {item.ownerName}</p><div className="mt-3 flex items-center justify-between gap-3 border-t pt-3 text-xs"><Badge variant="secondary">{item.category}</Badge><span className="font-semibold text-emerald-700 dark:text-emerald-400">{formatBenefit(item)}</span></div></Link><div className="flex justify-end px-3 pb-2"><RecordDeletionMenu module="visualImprovement" recordId={item.id} /></div></article>)}</div>
+    <div className="hidden overflow-x-auto lg:block"><table className="w-full min-w-[1160px] text-sm"><thead className="border-b bg-muted/25 text-left text-[10px] uppercase tracking-wide text-muted-foreground"><tr><th className="px-4 py-3">Improvement</th><th className="px-4 py-3">Plant / Zone</th><th className="px-4 py-3">Category</th><th className="px-4 py-3">Owner</th><th className="px-4 py-3">Created</th><th className="px-4 py-3">Benefit</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Updated</th><th className="px-4 py-3 text-right">Actions</th></tr></thead><tbody className="divide-y divide-border/65">{filtered.map((item) => <tr key={item.id} className="hover:bg-muted/25"><td className="max-w-xs px-4 py-3"><Link href={`/visual-improvement/${encodeURIComponent(item.id)}`} className="block truncate text-xs font-semibold hover:text-primary hover:underline">{item.title}</Link><span className="mt-0.5 block font-mono text-[10px] text-muted-foreground">{item.id}</span></td><td className="px-4 py-3"><p className="text-xs font-medium">{item.plant}</p><p className="mt-0.5 text-[11px] text-muted-foreground">{item.zone}</p></td><td className="px-4 py-3"><Badge variant="secondary">{item.category}</Badge></td><td className="px-4 py-3 text-xs">{item.ownerName}</td><td className="whitespace-nowrap px-4 py-3 text-xs">{formatVisualDate(item.createdAt)}</td><td className="whitespace-nowrap px-4 py-3 text-xs font-medium">{formatBenefit(item)}</td><td className="px-4 py-3"><VisualImprovementStatusBadge status={item.status} /></td><td className="whitespace-nowrap px-4 py-3 text-xs text-muted-foreground">{formatVisualDate(item.updatedAt)}</td><td className="px-4 py-3 text-right"><Button size="sm" variant="ghost" nativeButton={false} render={<Link href={`/visual-improvement/${encodeURIComponent(item.id)}`} />}>View<ArrowRight className="size-3.5" /></Button><RecordDeletionMenu module="visualImprovement" recordId={item.id} /></td></tr>)}</tbody></table></div>
     {!filtered.length && <VisualImprovementEmpty action={mayCreate ? <Button size="sm" nativeButton={false} render={<Link href="/visual-improvement/new" />}><Plus className="size-3.5" />Add Visual Improvement</Button> : undefined} />}
   </Card>;
 }

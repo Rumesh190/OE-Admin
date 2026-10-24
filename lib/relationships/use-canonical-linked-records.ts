@@ -1,4 +1,5 @@
 'use client';
+import { readDeletionActions, getRecordTombstone } from '@/lib/records/record-tombstones';
 import { useActionStore } from '@/lib/actions/action-store';
 import { getRoleVisibleActions } from '@/features/actions/action-center-data';
 import { useCurrentUser } from '@/lib/current-user';
@@ -46,6 +47,6 @@ export function useCanonicalLinkedRecords(current:OpsRecordRef) {
   }
   // Exclude foreign-organization/plant canonical rows before deriving edges, not just before rendering titles.
   const scopedWalks=gemba.walks.filter(scoped), walkIds=new Set(scopedWalks.map(w=>w.id));
-  const edges=canonicalRelationshipEdges({actions:actions.filter(scoped),redTags:redTags.filter(scoped),improvements:improvements.filter(scoped),audits:audits.filter(scoped),visualImprovements:visualImprovements.filter(scoped),gemba:{walks:scopedWalks,observations:gemba.observations.filter(o=>walkIds.has(o.gembaId))},vm:{...vm,boards:vm.boards.filter(scoped),meetings:vm.meetings.filter(scoped)},relationships:relationships.filter(r=>!r.metadata?.organizationId||r.metadata.organizationId===DEMO_ORGANIZATION.id)});
+  const edges=canonicalRelationshipEdges({actions:[...actions, ...readDeletionActions().filter(action => getRecordTombstone("action", action.id))].filter(scoped),redTags:redTags.filter(scoped),improvements:improvements.filter(scoped),audits:audits.filter(scoped),visualImprovements:visualImprovements.filter(scoped),gemba:{walks:scopedWalks,observations:gemba.observations.filter(o=>walkIds.has(o.gembaId))},vm:{...vm,boards:vm.boards.filter(scoped),meetings:vm.meetings.filter(scoped)},relationships:relationships.filter(r=>!r.metadata?.organizationId||r.metadata.organizationId===DEMO_ORGANIZATION.id)});
   return resolveLinkedRecordEntries(current,edges,catalog);
 }

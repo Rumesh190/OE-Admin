@@ -14,7 +14,6 @@ import FiveSAuditScheduled from "./components/FiveSAuditScheduled";
 
 import {
   createFiveSAudit,
-  deleteFiveSAudit,
   startScheduledFiveSAudit,
   updateScheduledFiveSAuditSetup,
   updateFiveSAudit,
@@ -279,23 +278,6 @@ export default function FiveSPage() {
      DELETE AUDIT
      ======================================================= */
 
-  function handleDeleteAudit(
-    audit: FiveSAudit
-  ) {
-    deleteFiveSAudit(
-      audit.id
-    );
-
-    if (
-      selectedAudit?.id ===
-      audit.id
-    ) {
-      setSelectedAudit(null);
-    }
-
-    setIsCreatingAudit(false);
-  }
-
   /* =======================================================
      COMPLETE AUDIT
      ======================================================= */
@@ -378,9 +360,6 @@ export default function FiveSPage() {
           handleViewAudit
         }
         onStartScheduledAudit={handleStartScheduledAudit}
-        onDeleteAudit={
-          handleDeleteAudit
-        }
       />
     </div>
   );

@@ -1,4 +1,5 @@
 "use client";
+import { RecordDeletionMenu } from "@/components/ops/record-deletion-menu";
 
 import { withBusinessRecordCreation } from "@/lib/records/module-records";
 
@@ -20,7 +21,7 @@ import {
 import { OpsDataTable } from "@/components/ops/ops-data-table";
 import { OpsFilterBar } from "@/components/ops/ops-filter-bar";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { PageContainer } from "@/components/layout/page-container";
+import { OpsListingLayout as PageContainer } from "@/components/ops/ops-listing";
 import { OpsEmptyState } from "@/components/ops/ops-empty-state";
 import { OpsTabBar } from "@/components/ops/ops-tabs";
 import FiveSPageHeader from "@/features/five-s/components/FiveSPageHeader";
@@ -49,6 +50,8 @@ import {
 import { getActionEscalations } from "@/lib/actions/action-attention-store";
 import { createAction, useActionStore } from "@/lib/actions/action-store";
 import { useCurrentUser } from "@/lib/current-user";
+import { hasPlatformLegacyOperationalAccess } from "@/lib/platform-operational-access";
+import { canCreateDemoModuleRecord } from "@/lib/demo/demo-module-creation";
 import { OpsPersonSelect } from "@/components/ops/ops-person-select";
 import { MAX_EVIDENCE_IMAGES, optimizeEvidenceImage, validateEvidenceSelection } from "@/lib/evidence-images";
 import { useFiveSZoneConfiguration } from "@/lib/five-s/configuration";
@@ -83,7 +86,7 @@ const DUE_FILTERS: ActionDueFilter[] = ["All", "Overdue", "Today", "Tomorrow", "
 const PRIORITIES: Array<"All" | MyActionPriority> = ["All", "High", "Medium", "Low"];
 
 function validTab(value?: string): ActionCenterTab {
-  return ACTION_CENTER_TABS.some((tab) => tab.id === value) ? value as ActionCenterTab : "my-actions";
+  return ACTION_CENTER_TABS.some((tab) => tab.id === value) ? value as ActionCenterTab : "all";
 }
 
 function validStatus(value?: string): ActionStatusFilter {
@@ -99,10 +102,10 @@ export default function ActionCenterPage({ initialTab, initialStatus, initialSou
   const adminUsers = useAdminUsers();
   const access = useModuleEntitlements();
   const adminUser = adminUsers.find((user) => user.id === currentUser.id);
-  const canCreate = hasPermission(adminUser, "actions.create") && !currentUser.isSuperAdmin;
+  const canCreate = canCreateDemoModuleRecord("actions", currentUser.id) || (currentUser.isSuperAdmin ? hasPlatformLegacyOperationalAccess("actions") : hasPermission(adminUser, "actions.create"));
   const url = useUrlState();
   const activeTab = validTab(url.params.get("tab") ?? initialTab);
-  const setActiveTab = (value: ActionCenterTab) => url.update({tab:value});
+  const setActiveTab = (value: ActionCenterTab) => url.update({tab:value, status:"All", due:"All"}, "push");
   const [moreFilters, setMoreFilters] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const urlPath = url.path;
@@ -166,9 +169,9 @@ export default function ActionCenterPage({ initialTab, initialStatus, initialSou
     </section>
 
     <Card className="min-w-0 gap-0 overflow-hidden">
-      <CardContent className="border-b p-3">
+      <CardContent className="p-0">
         {activeQuickFilter && <div className="mb-3 flex min-w-0 items-center justify-between gap-3 rounded-lg bg-primary/[0.06] px-3 py-2 text-xs"><p className="min-w-0 truncate"><span className="font-semibold">{activeQuickFilter === "open" ? "Open actions" : "Overdue actions"}</span><span className="text-muted-foreground"> · {filtered.length} {filtered.length === 1 ? "record" : "records"}</span></p><Button type="button" variant="ghost" size="sm" className="h-8 shrink-0" onClick={() => toggleQuickFilter(activeQuickFilter)}><X className="size-3.5" />Clear</Button></div>}
-        <OpsFilterBar expanded={moreFilters} onToggle={() => setMoreFilters(value => !value)} activeCount={activeFilterCount} className="lg:grid-cols-2 xl:grid-cols-[minmax(220px,1fr)_180px_170px_160px_auto]" primary={<>          <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input value={filters.search} onChange={(event) => updateFilter("search", event.target.value)} className="pl-9" placeholder="Search actions, source, person..." /></div>
+        <OpsFilterBar onClear={resetFilters} hasFilters={Boolean(filters.search || activeFilterCount)} expanded={moreFilters} onToggle={() => setMoreFilters(value => !value)} activeCount={activeFilterCount} className="lg:grid-cols-2 xl:grid-cols-[minmax(220px,1fr)_180px_170px_160px_auto]" primary={<>          <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input value={filters.search} onChange={(event) => updateFilter("search", event.target.value)} className="pl-9" placeholder="Search actions, source, person..." /></div>
           <FilterSelect value={filters.source} onChange={(value) => updateFilter("source", value as ActionCenterFilters["source"])} ariaLabel="Source module"><SelectItem value="All">All sources</SelectItem>{sourceOptions.map((source) => <SelectItem key={source.id} value={source.id}>{source.label}</SelectItem>)}</FilterSelect>
           <FilterSelect value={filters.status} onChange={(value) => updateStatusFilter(value as ActionStatusFilter)} ariaLabel="Status"><SelectItem value="All">All statuses</SelectItem>{STATUS_FILTERS.filter((item) => item !== "All").map((item) => <SelectItem key={item} value={item}>{item === "Open" ? "Open / Active" : item}</SelectItem>)}</FilterSelect>
           <FilterSelect value={filters.priority} onChange={(value) => updateFilter("priority", value as ActionCenterFilters["priority"])} ariaLabel="Priority"><SelectItem value="All">All priorities</SelectItem>{PRIORITIES.filter((item) => item !== "All").map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}{hasLegacyCritical && <SelectItem value="Critical">Legacy: Critical</SelectItem>}</FilterSelect>
@@ -176,7 +179,6 @@ export default function ActionCenterPage({ initialTab, initialStatus, initialSou
           <FilterSelect value={filters.zone} onChange={(value) => updateFilter("zone", value)} ariaLabel="Zone"><SelectItem value="All">All zones</SelectItem>{counts.zones.map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}</FilterSelect>
           <FilterSelect value={filters.assignedTo} onChange={(value) => updateFilter("assignedTo", value)} ariaLabel="Action Owner"><SelectItem value="All">All Action Owners</SelectItem>{counts.assignees.map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}</FilterSelect>
           <FilterSelect value={filters.due} onChange={(value) => updateFilter("due", value as ActionDueFilter)} ariaLabel="Due date"><SelectItem value="All">Any due date</SelectItem>{DUE_FILTERS.filter((item) => item !== "All").map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}</FilterSelect>
-          <Button variant="ghost" onClick={resetFilters}><X className="size-4" />Clear</Button>
         </>} />
       </CardContent>
 
@@ -209,21 +211,21 @@ function ActionTableRow({ action, reviewMode, onOpen, onReport }: { action: MyAc
   const priority = ACTION_PRIORITY_CONFIG[action.priority];
   const overdue = isActionOverdue(action);
   return <tr className="transition-colors hover:bg-muted/25">
-    <td className="max-w-[300px] px-4 py-3"><button type="button" onClick={onOpen} className="block min-w-0 text-left outline-none focus-visible:underline"><span className="block truncate font-medium">{action.title}</span><span className="mt-0.5 block font-mono text-[10px] text-muted-foreground">{action.id}</span><span className="mt-0.5 block text-[10px] text-muted-foreground">Created {formatShortDate(action.createdAt)}</span></button></td>
+    <td className="max-w-[300px] px-4 py-3"><button type="button" onClick={onOpen} title={action.title} className="block w-full min-w-0 text-left outline-none focus-visible:underline"><span className="block break-words font-medium">{action.title}</span><span className="mt-0.5 block font-mono text-[10px] text-muted-foreground">{action.id}</span><span className="mt-0.5 block text-[10px] text-muted-foreground">Created {formatShortDate(action.createdAt)}</span></button></td>
     <td className="max-w-[190px] px-4 py-3"><SourceBadge action={action} /><p className="mt-1 truncate text-[11px] text-muted-foreground" title={getActionSourceRecordLabel(action)}>{getActionSourceRecordLabel(action)}</p></td>
     <td className="max-w-[150px] px-4 py-3"><p className="truncate text-xs font-medium">{action.responsiblePersonName ?? action.assignedTo ?? "Unassigned"}</p><p className="mt-0.5 truncate text-[11px] text-muted-foreground">{action.area}</p></td>
     <td className="px-4 py-3"><Badge variant={priority.variant} size="sm">{priority.label}</Badge></td>
     <td className="px-4 py-3"><p className={cn("whitespace-nowrap text-xs font-medium", overdue && "text-red-600 dark:text-red-400")}>{reviewMode ? getReviewAgeLabel(action) : getActionDueLabel(action)}</p>{reviewMode && <p className="mt-0.5 text-[10px] text-muted-foreground">{formatShortDate(action.submittedForReviewAt ?? getActionUpdatedAt(action))}</p>}</td>
     <td className="px-4 py-3"><div className="flex flex-wrap gap-1"><StatusBadge variant={status.variant} status={status.label} /><ActionAttentionBadges action={action} /></div></td>
     <td className="whitespace-nowrap px-4 py-3 text-xs text-muted-foreground">{formatShortDate(getActionUpdatedAt(action))}</td>
-    <td className="px-4 py-3"><div className="flex justify-end gap-1"><Button size="icon-sm" variant="ghost" onClick={onOpen} aria-label={`View ${action.id}`}><Eye className="size-4" /></Button>{action.status === "Completed" && <Button size="icon-sm" variant="ghost" onClick={onReport} aria-label={`View report for ${action.id}`}><FileText className="size-4" /></Button>}</div></td>
+    <td className="px-4 py-3"><div className="flex justify-end gap-1"><Button size="icon-sm" variant="ghost" onClick={onOpen} aria-label={`View ${action.id}`}><Eye className="size-4" /></Button>{action.status === "Completed" && <Button size="icon-sm" variant="ghost" onClick={onReport} aria-label={`View report for ${action.id}`}><FileText className="size-4" /></Button>}<RecordDeletionMenu module="action" recordId={action.id} /></div></td>
   </tr>;
 }
 
 function ActionMobileCard({ action, reviewMode, onOpen }: { action: MyAction; reviewMode: boolean; onOpen: () => void }) {
   const priority = ACTION_PRIORITY_CONFIG[action.priority];
   const status = ACTION_STATUS_CONFIG[action.status];
-  return <button type="button" onClick={onOpen} className="min-w-0 rounded-lg border bg-background p-4 text-left outline-none transition-colors hover:bg-muted/35 focus-visible:ring-2 focus-visible:ring-ring"><div className="flex min-w-0 items-start justify-between gap-3"><div className="min-w-0"><p className="line-clamp-2 text-sm font-semibold">{action.title}</p><p className="mt-1 font-mono text-[10px] text-muted-foreground">{action.id}</p><p className="mt-0.5 text-[10px] text-muted-foreground">Created {formatShortDate(action.createdAt)}</p></div><Badge variant={priority.variant} size="sm">{priority.label}</Badge></div><div className="mt-3 flex flex-wrap items-center gap-2"><SourceBadge action={action} /><StatusBadge variant={status.variant} status={status.label} /><ActionAttentionBadges action={action} /></div><div className="mt-3 flex items-center justify-between gap-3 text-xs"><span className={cn("inline-flex items-center gap-1 text-muted-foreground", isActionOverdue(action) && "text-red-600 dark:text-red-400")}><CalendarDays className="size-3.5" />{reviewMode ? getReviewAgeLabel(action) : getActionDueLabel(action)}</span><span className="truncate text-muted-foreground">{action.area}</span></div></button>;
+  return <article className="min-w-0 rounded-xl border bg-background"><button type="button" onClick={onOpen} className="w-full min-w-0 p-4 text-left outline-none transition-colors hover:bg-muted/35 focus-visible:ring-2 focus-visible:ring-ring"><div className="flex min-w-0 items-start justify-between gap-3"><div className="min-w-0"><p className="line-clamp-2 text-sm font-semibold">{action.title}</p><p className="mt-1 font-mono text-[10px] text-muted-foreground">{action.id}</p><p className="mt-0.5 text-[10px] text-muted-foreground">Created {formatShortDate(action.createdAt)}</p></div><Badge variant={priority.variant} size="sm">{priority.label}</Badge></div><div className="mt-3 flex flex-wrap items-center gap-2"><SourceBadge action={action} /><StatusBadge variant={status.variant} status={status.label} /><ActionAttentionBadges action={action} /></div><div className="mt-3 flex items-center justify-between gap-3 text-xs"><span className={cn("inline-flex items-center gap-1 text-muted-foreground", isActionOverdue(action) && "text-red-600 dark:text-red-400")}><CalendarDays className="size-3.5" />{reviewMode ? getReviewAgeLabel(action) : getActionDueLabel(action)}</span><span className="truncate text-muted-foreground">{action.area}</span></div></button><div className="flex justify-end px-3 pb-2"><RecordDeletionMenu module="action" recordId={action.id} /></div></article>;
 }
 
 function ActionAttentionBadges({ action }: { action: MyAction }) {

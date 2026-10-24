@@ -1,3 +1,6 @@
+import { AccessContextBoundary } from "@/components/ops/access-context-boundary";
+import { AdministrationSubjectBoundary } from "@/components/ops/administration-subject-boundary";
+import { OperationalRecordBoundary } from "@/components/ops/operational-record-boundary";
 import type { ReactNode } from "react";
 
 import { AppShell } from "@/components/layout/app-shell";
@@ -11,5 +14,5 @@ export default function AppRouteGroupLayout({
 }: {
   children: ReactNode;
 }) {
-  return <AuthGate><AppShell>{children}</AppShell></AuthGate>;
+  return <AuthGate><AppShell><AccessContextBoundary><AdministrationSubjectBoundary><OperationalRecordBoundary>{children}</OperationalRecordBoundary></AdministrationSubjectBoundary></AccessContextBoundary></AppShell></AuthGate>;
 }

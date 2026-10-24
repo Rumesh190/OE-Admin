@@ -1,4 +1,8 @@
 "use client";
+import { requireLegacyOperationalWrite } from "@/lib/legacy-operational-write";
+import { hasPlatformLegacyOperationalAccess } from "@/lib/platform-operational-access";
+import { activeOperationalRecords, useActiveOperationalRecords, getRecordTombstone, registerDeletionSource } from "@/lib/records/record-tombstones";
+
 
 import { registerActionCreationSource } from "@/lib/actions/action-source-access";
 
@@ -7,6 +11,7 @@ import { allocateModuleRecordId, registerRecordCreationStore } from "@/lib/recor
 import { useSyncExternalStore } from "react";
 import { ORGANIZATION_ZONE_SEEDS } from "@/lib/organization-store";
 import { selectableImprovementOwners } from "./owner";
+import { canCreateDemoModuleRecord } from "@/lib/demo/demo-module-creation";
 import { getAdminUser } from "@/features/five-s/administration/store";
 import { safeSetStorage, safeSetStorageString, STORAGE_FULL_MESSAGE } from "@/lib/browser-storage";
 import type { DemoUser } from "@/lib/current-user";
@@ -34,7 +39,8 @@ import type {
   ProposalUpdateInput,
 } from "./types";
 
-const STORAGE_KEY = "five-s-continuous-improvements-v1";
+export const CONTINUOUS_IMPROVEMENT_STORAGE_KEY = "five-s-continuous-improvements-v1";
+const STORAGE_KEY = CONTINUOUS_IMPROVEMENT_STORAGE_KEY;
 const FIXTURE_VERSION_KEY = "five-s-continuous-improvements-fixture-version";
 const FIXTURE_VERSION = "ops-ci-workflow-v2";
 
@@ -186,6 +192,7 @@ function load() {
 }
 
 function persist(next: ContinuousImprovement[]) {
+  requireLegacyOperationalWrite("continuousImprovement");
   if (typeof window === "undefined") return false;
   const result = safeSetStorage(STORAGE_KEY, next);
   if (!result.success) {
@@ -202,6 +209,7 @@ function snapshot() { load(); return records; }
 function event(type: ImprovementEventType, actor: ImprovementActor, remark?: string): ImprovementEvent { return { id: `CIH-${crypto.randomUUID()}`, type, actorId: actor.id, actorName: actor.name, at: new Date().toISOString(), remark }; }
 function actor(user: DemoUser): ImprovementActor { return { id: user.id, name: user.name }; }
 function update(id: string, transform: (item: ContinuousImprovement) => ContinuousImprovement) {
+  if (getRecordTombstone("continuousImprovement", id)) return null;
   load();
   const current = records.find((item) => item.id === id);
   if (!current) return null;
@@ -209,9 +217,10 @@ function update(id: string, transform: (item: ContinuousImprovement) => Continuo
   return persist(records.map((item) => item.id === id ? next : item)) ? next : null;
 }
 
-export function useImprovements() { return useSyncExternalStore(subscribe, snapshot, () => CONTINUOUS_IMPROVEMENT_SEED_RECORDS as ContinuousImprovement[]); }
-export function getImprovements() { load(); return records; }
-export function getImprovementById(id: string) { load(); return records.find((item) => item.id === id); }
+export function useImprovements() { return useActiveOperationalRecords("continuousImprovement", useSyncExternalStore(subscribe, snapshot, () => CONTINUOUS_IMPROVEMENT_SEED_RECORDS as ContinuousImprovement[])); }
+export function getImprovements() { load(); return activeOperationalRecords("continuousImprovement", records); }
+export function getImprovementById(id: string) {
+  if (getRecordTombstone("continuousImprovement", id)) return undefined; load(); return records.find((item) => item.id === id); }
 export function setImprovements(next: ContinuousImprovement[]) { records = next; loaded = true; listeners.forEach((listener) => listener()); }
 /** Match User Management's existing non-completed assignment scope, by owner only. */
 export function getOutstandingUserImprovements(userId: string) {
@@ -241,12 +250,14 @@ export function createImprovement(input: CreateImprovementInput, user: DemoUser,
   const zone = getFiveSZoneConfiguration(input.zone ?? user.primaryZone);
   const hasBroadScope = Boolean(adminUser?.roles.includes("Admin"));
   const permittedZones = new Set(adminUser?.zoneMemberships.map((membership) => membership.zone) ?? []);
-  if (!zone || !adminUser || !adminUser.permissions.includes("ci.create") || user.isSuperAdmin || (!hasBroadScope && !permittedZones.has(zone.name))) throw new Error("Only Zone Members can create improvements.");
+  const platformAccess = user.isSuperAdmin && hasPlatformLegacyOperationalAccess("continuousImprovement", input.plant ?? user.plant);
+  const demoCreate = canCreateDemoModuleRecord("continuousImprovement", user.id);
+  if (!zone || !adminUser || (!demoCreate && (!adminUser.permissions.includes("ci.create") || (!platformAccess && (!hasBroadScope && !permittedZones.has(zone.name)))))) throw new Error("Only active factory users can create improvements in this factory.");
   const allowed = new Set(zone.members.map((member) => member.id));
   const ownerId = input.ownerId ?? user.id;
   const owner = getAdminUser(ownerId);
   const ownerInScope = owner?.roles.includes("Admin") || owner?.zoneMemberships.some((membership) => membership.zone === zone.name);
-  if (!owner || owner.status !== "Active" || owner.plant !== (input.plant ?? user.plant) || !owner.permissions.includes("ci.implement") || !ownerInScope) throw new Error("Select an active CI Owner for this Zone.");
+  if (!owner || owner.status !== "Active" || owner.plant !== (input.plant ?? user.plant) || (!demoCreate && (!owner.permissions.includes("ci.implement") || !ownerInScope))) throw new Error("Select an active CI Owner for this Zone.");
   if (input.memberIds.some((id) => !allowed.has(id))) throw new Error("Team members must belong to your Zone.");
   if (!input.title.trim() || !input.issueDescription.trim() || input.estimatedTime <= 0) throw new Error("Proposal requirements are not met.");
   const now = new Date().toISOString();
@@ -421,3 +432,5 @@ registerActionCreationSource("continuousImprovement", (input, user, identity) =>
   const item = input.sourceId ? getImprovementById(input.sourceId) : undefined;
   return { record: item, zone: item?.zone, permitted: Boolean(item && canCreateImprovementAction(user, identity, item)) };
 });
+
+registerDeletionSource("continuousImprovement", id => { load(); const item = records.find(item => item.id === id); return item ? { id: item.id, title: item.title, organizationId: "organizationId" in item && typeof item.organizationId === "string" ? item.organizationId : undefined, plant: item.plant, zone: item.zone, aliases: [], linkedActionIds: item.actionIds ?? [] } : undefined; });

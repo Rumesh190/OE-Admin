@@ -12,7 +12,7 @@ afterEach(() => vi.unstubAllGlobals());
 describe("Visual Management module migration", () => {
   it("exposes only the simplified daily-management IA and redirects advanced settings", () => {
     const nav = readFileSync(resolve(process.cwd(), "features/visual-management/visual-management-components.tsx"), "utf8");
-    for (const label of ["Overview", "Boards", "Meetings", "Settings"]) expect(nav).toContain(`label: "${label}"`);
+    for (const label of ["Overview", "All Boards", "All Meetings", "Settings"]) expect(nav).toContain(`label: "${label}"`);
     for (const hidden of ["KPI Configuration", "Tier Structure", "KPI Sections", "Escalations", "Decisions"]) expect(nav).not.toContain(`label: "${hidden}"`);
     for (const path of ["kpi-configuration", "kpi-sections", "tiers", "boards"]) {
       expect(readFileSync(resolve(process.cwd(), `app/(app)/visual-management/settings/${path}/page.tsx`), "utf8")).toContain('redirect("/visual-management/settings")');

@@ -1,3 +1,4 @@
+import { seedLegacyDirectoryPerson } from "./helpers/legacy-directory";
 import { authenticateDemoFixture } from "./helpers/demo-session";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DEMO_USERS } from "@/lib/current-user";
@@ -59,7 +60,7 @@ describe("B2.1 Visual Management command authorization", () => {
   it("rejects a known inactive administrator across all three modules", async () => {
     const users = await import("@/features/five-s/administration/store");
     const original = users.getAdminUser(admin.id)!;
-    const inactive = users.createAdminUser({ ...original, employeeId: "B21-INACTIVE", email: "b21-inactive@example.test", name: "Inactive fixture", status: "Inactive" }, admin.id)!;
+    const inactive = seedLegacyDirectoryPerson(users, { ...original, employeeId: "B21-INACTIVE", email: "b21-inactive@example.test", name: "Inactive fixture", status: "Inactive" });
     const gemba = await import("@/features/gemba/gemba-access");
     const vm = await import("@/features/visual-management/visual-management-store");
 

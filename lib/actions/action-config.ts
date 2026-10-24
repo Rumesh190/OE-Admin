@@ -1,3 +1,4 @@
+import { deletedActionSource } from "@/lib/records/record-tombstones";
 import type { LucideIcon } from "lucide-react";
 import { ClipboardList, Eye, Flag, Footprints, PenLine, Tag, TrendingUp } from "lucide-react";
 
@@ -81,6 +82,7 @@ export function normalizeActionSource(action: MyAction): MyAction {
 
 export function getActionSourceHref(action: MyAction) {
   const moduleId = inferActionSourceModule(action);
+  if (deletedActionSource(action, moduleId)) return undefined;
   const sourceId = action.sourceId ?? action.auditId ?? action.sourceTitle;
   if (moduleId === "continuousImprovement") return `/continuous-improvement/${encodeURIComponent(sourceId)}`;
   if (moduleId === "redFlag") return sourceId.startsWith("RF-") ? `/red-flag/${encodeURIComponent(sourceId)}` : `/5s/red/${encodeURIComponent(sourceId)}`;
@@ -103,6 +105,8 @@ export function getActionSourceHref(action: MyAction) {
 }
 
 export function getActionSourceRecordLabel(action: MyAction) {
+  const deleted = deletedActionSource(action, inferActionSourceModule(action));
+  if (deleted) return `Source deleted · ${action.sourceId ?? action.auditId ?? action.sourceTitle}`;
   if (inferActionSourceModule(action) === "visualManagement" && action.visualManagementSource) {
     return `${action.visualManagementSource.kpiNameSnapshot} · ${action.visualManagementSource.boardNameSnapshot} · ${action.visualManagementSource.reportingPeriod.label}`;
   }

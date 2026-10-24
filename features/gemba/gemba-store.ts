@@ -1,4 +1,8 @@
 "use client";
+import { canWriteLegacyOperational, requireLegacyOperationalWrite } from "@/lib/legacy-operational-write";
+import { useMemo } from "react";
+import { activeOperationalRecords, useRecordDeletions, getRecordTombstone, registerDeletionSource } from "@/lib/records/record-tombstones";
+
 
 import { registerActionCreationSource } from "@/lib/actions/action-source-access";
 
@@ -28,7 +32,8 @@ import type {
   GembaWalk,
 } from "./types";
 
-const STORAGE_KEY = "ops-gemba-v1";
+export const GEMBA_STORAGE_KEY = "ops-gemba-v1";
+const STORAGE_KEY = GEMBA_STORAGE_KEY;
 
 /**
  * Defensive safeguard (not just an at-capture-time convention): strips any
@@ -166,6 +171,7 @@ function load() {
     const parsed = JSON.parse(saved) as Partial<GembaState>;
     if (Array.isArray(parsed.walks) && Array.isArray(parsed.observations)) state = parsed as GembaState;
   } catch { /* keep the complete demo state */ }
+  if (!canWriteLegacyOperational("gemba")) return;
   normalizeLegacyWalkStatuses();
   // Fire-and-forget: migrates any legacy embedded photo payloads out of this
   // already-loaded state into IndexedDB, then re-persists once. The UI keeps
@@ -216,6 +222,7 @@ async function migrateLegacyGembaPhotos() {
 
   const migrated = new Set<string>();
   for (const item of pending) {
+    if (!canWriteLegacyOperational("gemba")) return;
     try {
       // Only remove the legacy embedded payload after the Blob is confirmed saved.
       await saveGembaPhoto(item.storageKey, item.blob);
@@ -224,7 +231,7 @@ async function migrateLegacyGembaPhotos() {
       console.error(`[gemba] failed to migrate photo evidence ${item.evidenceId}; leaving legacy payload in place for retry`, error);
     }
   }
-  if (!migrated.size) return;
+  if (!migrated.size || !canWriteLegacyOperational("gemba")) return;
 
   // Re-read the freshest state (not a snapshot captured before the awaits
   // above) so a concurrent save during migration is never clobbered.
@@ -244,6 +251,7 @@ async function migrateLegacyGembaPhotos() {
 let lastSaveError = "";
 export function getGembaSaveError() { return lastSaveError; }
 function persist(next: GembaState) {
+  requireLegacyOperationalWrite("gemba");
   lastSaveError = "";
   const previous = state;
   state = next;
@@ -257,10 +265,11 @@ function subscribe(listener: () => void) { load(); listeners.add(listener); retu
 function snapshot() { load(); return state; }
 function serverSnapshot() { return GEMBA_SEED_STATE; }
 
-export function useGembaStore() { return useSyncExternalStore(subscribe, snapshot, serverSnapshot); }
-export function getGembaState() { load(); return state; }
-export function getGembaWalk(id: string) { load(); return state.walks.find((walk) => walk.id === id); }
-export function getGembaObservations(walkId: string) { load(); return state.observations.filter((observation) => observation.gembaId === walkId); }
+export function useGembaStore() { const raw = useSyncExternalStore(subscribe, snapshot, serverSnapshot); const deleted = useRecordDeletions(); return useMemo(() => activeGembaState(raw, deleted), [raw, deleted]); }
+function activeGembaState(raw: GembaState, deleted?: ReturnType<typeof useRecordDeletions>): GembaState { const walks = activeOperationalRecords("gemba", raw.walks, deleted); const observations = activeOperationalRecords("gembaObservation", raw.observations, deleted).filter(item => !getRecordTombstone("gemba", item.gembaId)); return { ...raw, walks, observations }; }
+export function getGembaState() { load(); return activeGembaState(state); }
+export function getGembaWalk(id: string) { load(); if (getRecordTombstone("gemba", id)) return undefined; return state.walks.find((walk) => walk.id === id); }
+export function getGembaObservations(walkId: string) { load(); return getGembaState().observations.filter((observation) => observation.gembaId === walkId); }
 
 function nextWalkId() {
   return allocateModuleRecordId("gemba", state.walks.map(walk => walk.id));
@@ -303,7 +312,7 @@ export function createGembaWalk(input: CreateGembaWalkInput, actor: GembaActor, 
 
 export function startGembaWalk(walkId: string, actor: GembaActor) {
   load();
-  const selected = state.walks.find(walk => walk.id === walkId);
+  const selected = getGembaWalk(walkId);
   if (!selected || selected.status !== "Scheduled" || !canMutateGembaWalk(selected, actor)) return false;
   const now = new Date().toISOString();
   const next = state.walks.map((walk) => walk.id === walkId && walk.status === "Scheduled" ? {
@@ -333,7 +342,7 @@ export interface GembaWalkSetupPatch {
  */
 export function updateGembaWalkSetup(walkId: string, patch: GembaWalkSetupPatch, actor: GembaActor) {
   load();
-  const walk = state.walks.find((item) => item.id === walkId);
+  const walk = getGembaWalk(walkId);
   if (!walk || !canMutateGembaWalk(walk, actor)) return null;
   if (walk.status !== "Scheduled" || !canMutateGembaWalk({ ...walk, ...patch }, actor)) return null;
   if (patch.leadId && getAdminUser(patch.leadId)?.status !== "Active") return null;
@@ -404,8 +413,9 @@ export function resolveGembaHorizontalDeployment(
 }
 
 export function saveGembaObservation(walkId: string, input: SaveObservationInput, actor: GembaActor, observationId?: string): GembaObservation | null {
+  if (observationId && getRecordTombstone("gembaObservation", observationId)) return null;
   load();
-  const walk = state.walks.find((item) => item.id === walkId);
+  const walk = getGembaWalk(walkId);
   if (!walk || !canMutateGembaWalk(walk, actor)) return null;
   if (!walk || walk.status !== "In Progress") return null;
   const now = new Date().toISOString();
@@ -480,7 +490,7 @@ export function saveGembaObservation(walkId: string, input: SaveObservationInput
 
 export function linkGembaAction(walkId: string, observationId: string, actionId: string, actor: GembaActor) {
   load();
-  const walk = state.walks.find((item) => item.id === walkId);
+  const walk = getGembaWalk(walkId);
   if (!walk || !canMutateGembaWalk(walk, actor) || walk.status === "Completed") return false;
   const observation = state.observations.find((item) => item.id === observationId && item.gembaId === walkId);
   if (!walk || !observation || observation.actionId) return false;
@@ -495,7 +505,7 @@ export function linkGembaAction(walkId: string, observationId: string, actionId:
 
 export function linkGembaRedTag(walkId: string, observationId: string, redTagId: string, actor: GembaActor) {
   load();
-  const walk = state.walks.find((item) => item.id === walkId);
+  const walk = getGembaWalk(walkId);
   if (!walk || !canMutateGembaWalk(walk, actor) || walk.status === "Completed") return false;
   const observation = state.observations.find((item) => item.id === observationId && item.gembaId === walkId);
   if (!walk || !observation || observation.redTagId) return false;
@@ -511,7 +521,7 @@ export function linkGembaRedTag(walkId: string, observationId: string, redTagId:
 export function linkGembaImprovement(walkId: string, observationId: string, improvementId: string, actor: GembaActor) {
   lastSaveError = "";
   load();
-  const walk = state.walks.find((item) => item.id === walkId);
+  const walk = getGembaWalk(walkId);
   if (!walk || !canMutateGembaWalk(walk, actor) || walk.status === "Completed") return false;
   const observation = state.observations.find((item) => item.id === observationId && item.gembaId === walkId);
   if (!walk || !observation || observation.improvementId) return false;
@@ -526,7 +536,7 @@ export function linkGembaImprovement(walkId: string, observationId: string, impr
 
 export function completeGembaWalk(walkId: string, actor: GembaActor) {
   load();
-  const selected = state.walks.find(walk => walk.id === walkId);
+  const selected = getGembaWalk(walkId);
   if (!selected || selected.status !== "In Progress" || !canMutateGembaWalk(selected, actor)) return false;
   const now = new Date().toISOString();
   const walks = state.walks.map((walk) => walk.id === walkId && walk.status === "In Progress" ? {
@@ -557,3 +567,7 @@ registerActionCreationSource("gemba", (input, user, identity) => {
   const observation = current.observations.find(item => item.id === input.sourceObservationId && item.gembaId === walk?.id);
   return { record: walk, zone: walk?.zone, permitted: Boolean(walk && walk.status !== "Completed" && observation && observation.type !== "Positive" && canMutateGembaWalk(walk, identity)), alreadyLinked: observation?.actionId };
 });
+
+export function getGembaEvidenceArchive() { load(); return state; }
+registerDeletionSource("gemba", id => { load(); const item = state.walks.find(item => item.id === id); const children = state.observations.filter(item => item.gembaId === id); return item ? { id, title: item.purpose, organizationId: "organizationId" in item && typeof item.organizationId === "string" ? item.organizationId : undefined, plant: item.plant, zone: item.zone, childIds: children.map(item => item.id), linkedActionIds: [...item.actionIds, ...children.flatMap(item => item.actionId ? [item.actionId] : [])] } : undefined; });
+registerDeletionSource("gembaObservation", id => { load(); const item = state.observations.find(item => item.id === id); const walk = state.walks.find(walk => walk.id === item?.gembaId); return item && walk ? { id, title: item.title, organizationId: "organizationId" in walk && typeof walk.organizationId === "string" ? walk.organizationId : undefined, plant: walk.plant, zone: walk.zone, parentId: walk.id, linkedActionIds: item.actionId ? [item.actionId] : [] } : undefined; });

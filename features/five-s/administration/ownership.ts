@@ -23,6 +23,7 @@ export function deactivateUserWithActionTransfer(userId: string, replacementId: 
   if (actor?.status !== "Active" || !actor.roles.includes("Admin") || !actor.permissions.includes("administration.manage_users")) throw new Error("Administration access is required.");
   if (userId === actorId) throw new Error("You cannot deactivate your own Admin account.");
   if (!getAdminUser(userId)) throw new Error("User not found.");
+  if (getAdminUser(userId)?.accessModel === "v3") throw new Error("Use scoped administration for v3 profiles; legacy ownership transfer is not permitted.");
   if (getOrganizationZones().some(zone => zone.leaderId === userId)) throw new Error("Reassign this user's Zone Leader responsibility before deactivating the account.");
   const outstanding = getOutstandingUserActions(userId);
   if (outstanding.length && (!reason.trim() || !getUserTransferCandidates(userId).some(user => user.id === replacementId))) throw new Error("Select an eligible replacement owner and enter a transfer reason.");

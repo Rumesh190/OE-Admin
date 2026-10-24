@@ -1,4 +1,5 @@
 "use client";
+import { RecordDeletionMenu } from "@/components/ops/record-deletion-menu";
 import { CanonicalLinkedRecords } from "@/components/ops/ops-linked-records";
 
 import { compareNewestMeetings } from "@/lib/records/record-order";
@@ -7,7 +8,7 @@ import { useUrlState } from "@/lib/navigation/use-url-state";
 import { ActionLink } from "@/components/ops/ops-return-link";
 
 import { useMemo, useState } from "react";
-import Link from "next/link";
+import Link from "@/components/ops/ops-record-link";
 import { ArrowLeft, ArrowRight, CalendarPlus, CirclePlay, ClipboardCheck, History, ListTodo, Printer } from "lucide-react";
 import { PageContainer } from "@/components/layout/page-container";
 import { Badge } from "@/components/ui/badge";
@@ -38,7 +39,7 @@ export default function BoardDetailPage({ boardId }: { boardId: string }) {
   if (!board) return <Missing />;
   const actionIds = new Set(meetings.flatMap((meeting) => meeting.actionIds));
   const actions = allActions.filter((action) => actionIds.has(action.id) || (action.sourceModule === "visualManagement" && action.sourceLocation?.includes(board.zone ?? board.plant)));
-  return <PageContainer className="max-w-none"><FiveSPageHeader eyebrow={`${board.tier} · ${board.plant}${board.zone ? ` / ${board.zone}` : ""}`} title={board.name} description={`${board.meetingFrequency} · Owner: ${board.owner.name} · ${board.members.length} expected members`} leading={<Button variant="ghost" size="icon-sm" nativeButton={false} render={<Link href="/visual-management/boards" />} aria-label="Back to boards"><ArrowLeft className="size-4" /></Button>} actions={<div className="flex flex-wrap gap-2"><Button onClick={() => setStartOpen(true)}><CirclePlay className="size-4" />Start Meeting</Button><Button variant="outline" nativeButton={false} render={<Link href={`/visual-management/boards/${encodeURIComponent(board.id)}/print`} />}><Printer className="size-4" />Print Board</Button>{canManageVisualManagementSchedule(board, currentUser, adminUser?.roles) ? <Button variant="outline" onClick={() => setScheduleOpen(true)}><CalendarPlus className="size-4" />Schedule Meeting</Button> : null}</div>} /><VisualManagementNav />
+  return <PageContainer className="max-w-none"><FiveSPageHeader eyebrow={`${board.tier} · ${board.plant}${board.zone ? ` / ${board.zone}` : ""}`} title={board.name} description={`${board.meetingFrequency} · Owner: ${board.owner.name} · ${board.members.length} expected members`} leading={<Button variant="ghost" size="icon-sm" nativeButton={false} render={<Link href="/visual-management/boards" />} aria-label="Back to boards"><ArrowLeft className="size-4" /></Button>} actions={<div className="flex flex-wrap gap-2"><RecordDeletionMenu module="vmBoard" recordId={board.id} returnTo="/visual-management/boards" /><Button onClick={() => setStartOpen(true)}><CirclePlay className="size-4" />Start Meeting</Button><Button variant="outline" nativeButton={false} render={<Link href={`/visual-management/boards/${encodeURIComponent(board.id)}/print`} />}><Printer className="size-4" />Print Board</Button>{canManageVisualManagementSchedule(board, currentUser, adminUser?.roles) ? <Button variant="outline" onClick={() => setScheduleOpen(true)}><CalendarPlus className="size-4" />Schedule Meeting</Button> : null}</div>} /><VisualManagementNav />
     <CanonicalLinkedRecords currentRecord={{module:"visualManagement",recordId:board.id}} />
     <Tabs value={["board","actions","meetings"].includes(url.params.get("tab") ?? "") ? url.params.get("tab")! : "board"} onValueChange={tab => url.update({tab})}><TabsList variant="line" className="max-w-full overflow-x-auto"><TabsTrigger value="board"><ClipboardCheck />Board</TabsTrigger><TabsTrigger value="actions"><ListTodo />Actions <Badge size="sm" variant="secondary">{actions.length}</Badge></TabsTrigger><TabsTrigger value="meetings"><History />Meetings <Badge size="sm" variant="secondary">{meetings.length}</Badge></TabsTrigger></TabsList>
       <TabsContent value="board" className="mt-4"><ConfiguredKpiBoard board={board} /></TabsContent>

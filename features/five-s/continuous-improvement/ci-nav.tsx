@@ -5,8 +5,8 @@ import { OpsTabBar } from "@/components/ops/ops-tabs";
 
 const CI_TABS = [
   { id: "overview", label: "Overview", href: "/continuous-improvement" },
-  { id: "improvements", label: "Improvements", href: "/continuous-improvement?tab=improvements" },
-  { id: "review", label: "Review Queue", href: "/continuous-improvement?tab=review" },
+  { id: "improvements", label: "All", href: "/continuous-improvement?tab=improvements" },
+  { id: "review", label: "Under Review", href: "/continuous-improvement?tab=review" },
   { id: "completed", label: "Completed", href: "/continuous-improvement?tab=completed" },
 ];
 

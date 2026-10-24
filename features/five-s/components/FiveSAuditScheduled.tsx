@@ -12,6 +12,8 @@ import { Label } from "@/components/ui/label";
 import type { FiveSAudit } from "@/features/five-s/types/five-s";
 import { toLocalInputDate } from "@/lib/five-s/configuration";
 import { validateFiveSAuditSchedule } from "@/lib/five-s/audit-store";
+import { auditContext, isV4Audit } from "@/lib/five-s/audit-authorization";
+import { resolveCurrentFactoryActor } from "@/features/five-s/administration/factory-authorization";
 import FiveSPageHeader from "./FiveSPageHeader";
 
 interface FiveSAuditScheduledProps {
@@ -32,14 +34,23 @@ export default function FiveSAuditScheduled({ audit, onBack, onStart, onUpdate }
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
 
+  const [formRevision, setFormRevision] = useState(audit.revision);
+  const stale = isV4Audit(audit) && formRevision !== audit.revision;
+  const scope = auditContext(audit);
+  const canEdit = !scope || Boolean(resolveCurrentFactoryActor(scope)?.factoryAdmin);
+  function startAudit() { try { if (stale) throw new Error("Audit revision changed. Reload setup before starting."); onStart(audit); } catch(e) { setError(e instanceof Error ? e.message : "Unable to start Audit."); } }
   function saveSetup() {
+    try {
+    if (!canEdit || stale) throw new Error("Setup authority or revision changed. Reload before saving.");
     const scheduleError = validateFiveSAuditSchedule(scheduledDate, scheduledTime);
     if (scheduleError) { setError(scheduleError); setNotice(""); return; }
     if (!dueDate || dueDate < today) { setError("Due date cannot be in the past."); setNotice(""); return; }
     const updated = onUpdate(audit, { scheduledDate, scheduledTime, dueDate });
     if (!updated) { setError("Scheduled setup could not be updated."); setNotice(""); return; }
+    setFormRevision(updated.revision);
     setError("");
     setNotice("Scheduled audit setup updated.");
+    } catch(e) { setError(e instanceof Error ? e.message : "Unable to save scheduled setup."); setNotice(""); }
   }
 
   return <PageContainer>
@@ -48,7 +59,7 @@ export default function FiveSAuditScheduled({ audit, onBack, onStart, onUpdate }
       title={audit.title}
       description={`${audit.plant} · ${audit.area} · ${audit.department}`}
       leading={<Button type="button" variant="ghost" size="icon" onClick={onBack} aria-label="Back to audits"><ArrowLeft className="size-4" /></Button>}
-      actions={<><Badge variant="muted">Scheduled</Badge><Button type="button" onClick={() => onStart(audit)}><Play className="size-4" />Start Audit</Button></>}
+      actions={<><Badge variant="muted">Scheduled</Badge><Button type="button" disabled={stale} onClick={startAudit}><Play className="size-4" />Start Audit</Button></>}
     />
 
     <Card className="gap-0 overflow-hidden">
@@ -61,13 +72,15 @@ export default function FiveSAuditScheduled({ audit, onBack, onStart, onUpdate }
           <Summary label="Audit ID" value={audit.title} mono />
         </dl>
         <div className="grid gap-4 md:grid-cols-3">
-          <Field label="Scheduled Date *" htmlFor="scheduled-audit-date"><Input id="scheduled-audit-date" type="date" min={today} value={scheduledDate} onChange={(event) => { setScheduledDate(event.target.value); setError(""); setNotice(""); }} /></Field>
-          <Field label="Scheduled Time *" htmlFor="scheduled-audit-time"><Input id="scheduled-audit-time" type="time" value={scheduledTime} onChange={(event) => { setScheduledTime(event.target.value); setError(""); setNotice(""); }} /></Field>
-          <Field label="Due Date *" htmlFor="scheduled-audit-due"><Input id="scheduled-audit-due" type="date" min={today} value={dueDate} onChange={(event) => { setDueDate(event.target.value); setError(""); setNotice(""); }} /></Field>
+          <Field label="Scheduled Date *" htmlFor="scheduled-audit-date"><Input disabled={!canEdit || stale} id="scheduled-audit-date" type="date" min={today} value={scheduledDate} onChange={(event) => { setScheduledDate(event.target.value); setError(""); setNotice(""); }} /></Field>
+          <Field label="Scheduled Time *" htmlFor="scheduled-audit-time"><Input disabled={!canEdit || stale} id="scheduled-audit-time" type="time" value={scheduledTime} onChange={(event) => { setScheduledTime(event.target.value); setError(""); setNotice(""); }} /></Field>
+          <Field label="Due Date *" htmlFor="scheduled-audit-due"><Input disabled={!canEdit || stale} id="scheduled-audit-due" type="date" min={today} value={dueDate} onChange={(event) => { setDueDate(event.target.value); setError(""); setNotice(""); }} /></Field>
         </div>
+        {!canEdit && <p className="text-sm text-muted-foreground">Only an assigned Factory Admin can change scheduled setup. Auditor execution follows the existing authorization.</p>}
+        {stale && <div><p className="text-sm">This Audit changed. Reload its recorded setup before editing or starting.</p><Button variant="outline" onClick={() => { setScheduledDate(audit.scheduledDate ?? ""); setScheduledTime(audit.scheduledTime ?? ""); setDueDate(audit.dueDate); setFormRevision(audit.revision); setError(""); }}>Reload Audit setup</Button></div>}
         {error && <p role="alert" className="rounded-lg border border-destructive/20 bg-destructive/[0.06] px-4 py-3 text-sm text-destructive">{error}</p>}
         {notice && <p role="status" className="rounded-lg border border-emerald-500/20 bg-emerald-500/[0.06] px-4 py-3 text-sm text-emerald-700 dark:text-emerald-300">{notice}</p>}
-        <div className="flex flex-col-reverse gap-2 border-t pt-4 sm:flex-row sm:justify-end"><Button type="button" variant="outline" onClick={saveSetup}>Save Setup</Button><Button type="button" onClick={() => onStart(audit)}><Play className="size-4" />Start Audit</Button></div>
+        <div className="flex flex-col-reverse gap-2 border-t pt-4 sm:flex-row sm:justify-end"><Button type="button" variant="outline" disabled={!canEdit || stale} onClick={saveSetup}>Save Setup</Button><Button type="button" disabled={stale} onClick={startAudit}><Play className="size-4" />Start Audit</Button></div>
       </CardContent>
     </Card>
   </PageContainer>;

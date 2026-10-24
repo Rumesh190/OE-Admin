@@ -1,24 +1,24 @@
 "use client";
 
+import { getActiveAccessContext } from "./administration/access-v4-context";
 import { newestCreatedFirst } from "@/lib/records/record-order";
 
 
 import { withBusinessRecordCreation } from "@/lib/records/module-records";
 
 import { useState } from "react";
-import { useCurrentUser } from "@/lib/current-user";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 
 import FiveSAuditList from "./components/FiveSAuditList";
+import { canReadScopedAudit, canExecuteScopedAudit, requiresScopedAuditPolicy } from "@/lib/five-s/audit-authorization";
+import { Button } from "@/components/ui/button";
 import FiveSAuditCreate from "./components/FiveSAuditCreate";
 import FiveSAuditExecution from "./components/FiveSAuditExecution";
 import FiveSAuditScheduled from "./components/FiveSAuditScheduled";
+import FiveSAuditReport from "./components/FiveSAuditReport";
 import { PageContainer } from "@/components/layout/page-container";
 
 import {
   createFiveSAudit,
-  deleteFiveSAudit,
-  canDeleteFiveSAudit,
   startScheduledFiveSAudit,
   updateScheduledFiveSAuditSetup,
   useFiveSAuditStore,
@@ -33,7 +33,6 @@ import type {
 import { FIVE_S_QUESTIONS } from "@/features/settings/standard-audit-checklist/defaults";
 import { referenceFields } from "@/lib/five-s/reference-guides";
 import { createAuditChecklistSnapshot } from "@/features/settings/custom-audit-questions/checklist";
-import { AuditNav } from "./audit-nav";
 
 /* =========================================================
    5S CHECKLIST
@@ -135,12 +134,10 @@ function getCategoryDescription(
 
 export default function FiveSAuditListPage({ initialAuditId }: { initialAuditId?: string } = {}) {
   const audits = newestCreatedFirst(useFiveSAuditStore());
-  const actor = useCurrentUser();
-  const [pendingDelete, setPendingDelete] = useState<FiveSAudit | null>(null);
-  const [deleteError, setDeleteError] = useState("");
 
-  const [selectedAudit, setSelectedAudit] =
-    useState<FiveSAudit | null>(() => audits.find((audit) => audit.id === initialAuditId) ?? null);
+  const [selectedAuditId, setSelectedAuditId] = useState<string | null>(initialAuditId ?? null);
+  const selectedAudit = audits.find(a => a.id === selectedAuditId) ?? null;
+  function setSelectedAudit(audit: FiveSAudit | null) { setSelectedAuditId(audit?.id ?? null); }
 
   const [isCreatingAudit, setIsCreatingAudit] =
     useState(false);
@@ -159,6 +156,7 @@ export default function FiveSAuditListPage({ initialAuditId }: { initialAuditId?
      ======================================================= */
 
   async function handleCreateAudit(input: {
+    organizationId?: string; plantId?: string; zoneId?: string; assignedAuditorId?: string; departmentId?: string; expectedContextSelectionId?: string;
     title: string;
     plant: string;
     department: string;
@@ -169,10 +167,11 @@ export default function FiveSAuditListPage({ initialAuditId }: { initialAuditId?
     scheduledDate?: string;
     scheduledTime?: string;
   }) {
-    const sections = createAuditChecklistSnapshot(createEmptyFiveSSections());
+    const sections = createAuditChecklistSnapshot(createEmptyFiveSSections(), undefined, input.organizationId).map(section => ({ ...section, questions: section.questions.map(q => input.departmentId ? { ...q, departmentId: input.departmentId } : q) }));
 
     const audit =
       await withBusinessRecordCreation(() => createFiveSAudit({
+        organizationId: input.organizationId, plantId: input.plantId, zoneId: input.zoneId, assignedAuditorId: input.assignedAuditorId,
         title: input.title,
         plant: input.plant,
         department: input.department,
@@ -182,7 +181,7 @@ export default function FiveSAuditListPage({ initialAuditId }: { initialAuditId?
         scheduledDate: input.scheduledDate,
         scheduledTime: input.scheduledTime,
         sections,
-      }, { startNow: input.startNow }));
+      }, { startNow: input.startNow, expectedContextSelectionId: input.expectedContextSelectionId }));
 
     setIsCreatingAudit(false);
     setSelectedAudit(audit);
@@ -200,12 +199,12 @@ export default function FiveSAuditListPage({ initialAuditId }: { initialAuditId?
   }
 
   function handleStartScheduledAudit(audit: FiveSAudit) {
-    const startedAudit = startScheduledFiveSAudit(audit.id);
+    const startedAudit = startScheduledFiveSAudit(audit.id, new Date(), audit.policyVersion ? { selectionId: getActiveAccessContext()?.selectionId ?? "", revision: audit.revision! } : undefined);
     if (startedAudit) setSelectedAudit(startedAudit);
   }
 
   function handleUpdateScheduledAudit(audit: FiveSAudit, updates: Pick<FiveSAudit, "dueDate" | "scheduledDate" | "scheduledTime">) {
-    const updatedAudit = updateScheduledFiveSAuditSetup(audit.id, updates);
+    const updatedAudit = updateScheduledFiveSAuditSetup(audit.id, updates, new Date(), audit.policyVersion ? { selectionId: getActiveAccessContext()?.selectionId ?? "", revision: audit.revision! } : undefined);
     if (updatedAudit) setSelectedAudit(updatedAudit);
     return updatedAudit;
   }
@@ -213,12 +212,6 @@ export default function FiveSAuditListPage({ initialAuditId }: { initialAuditId?
   /* =======================================================
      DELETE AUDIT
      ======================================================= */
-
-  function handleDeleteAudit(audit: FiveSAudit) {
-    setDeleteError("");
-    if (!canDeleteFiveSAudit(audit, actor)) { setDeleteError("Only the assigned auditor or an Admin can delete Draft/Scheduled Audits without linked Actions."); return; }
-    setPendingDelete(audit);
-  }
 
   /* =======================================================
      COMPLETE AUDIT
@@ -258,14 +251,19 @@ export default function FiveSAuditListPage({ initialAuditId }: { initialAuditId?
      EXECUTION
      ======================================================= */
 
+  if (selectedAuditId && !selectedAudit) return <PageContainer><h1 className="text-lg font-semibold">Audit unavailable</h1><p className="mt-3 text-sm">This audit is unavailable in your current scope.</p><Button className="mt-4" onClick={handleBack}>Back to audits</Button></PageContainer>;
   if (selectedAudit) {
+    const currentAudit = audits.find(a => a.id === selectedAudit.id);
+    if (!currentAudit || !canReadScopedAudit(currentAudit)) return <PageContainer><p>Audit unavailable in your current scope.</p><Button onClick={handleBack}>Back to audits</Button></PageContainer>;
+    if (requiresScopedAuditPolicy(currentAudit) && currentAudit.status !== "Completed" && !canExecuteScopedAudit(currentAudit, undefined, currentAudit.status === "Scheduled" ? "start" : "edit")) return <FiveSAuditReport auditId={currentAudit.id} />;
     if (selectedAudit.status === "Scheduled") {
-      return <FiveSAuditScheduled audit={selectedAudit} onBack={handleBack} onStart={handleStartScheduledAudit} onUpdate={handleUpdateScheduledAudit} />;
+      return <FiveSAuditScheduled audit={currentAudit} onBack={handleBack} onStart={handleStartScheduledAudit} onUpdate={handleUpdateScheduledAudit} />;
     }
     return (
       <div className="grid gap-6">
         <FiveSAuditExecution
-          audit={selectedAudit}
+          key={`${currentAudit.id}:${currentAudit.assignedAuditorId ?? "legacy"}`}
+          audit={currentAudit}
           onBack={handleBack}
           onComplete={handleCompleteAudit}
         />
@@ -279,16 +277,11 @@ export default function FiveSAuditListPage({ initialAuditId }: { initialAuditId?
 
   return (
     <PageContainer>
-      {deleteError && <p role="alert" className="text-sm text-destructive">{deleteError}</p>}
-      <AlertDialog open={Boolean(pendingDelete)} onOpenChange={open => { if (!open) setPendingDelete(null); }}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Delete {pendingDelete?.title}?</AlertDialogTitle><AlertDialogDescription>This removes the uncompleted Audit. Completed Audits and Audits with linked Actions cannot be deleted.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={() => { if (pendingDelete && !deleteFiveSAudit(pendingDelete.id, actor, true)) setDeleteError("Deletion could not be saved. Check permission, linked Actions and browser storage."); setPendingDelete(null); }}>Confirm Delete</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
       <FiveSAuditList
         audits={audits}
         onStartAudit={handleStartAudit}
         onViewAudit={handleViewAudit}
         onStartScheduledAudit={handleStartScheduledAudit}
-        onDeleteAudit={handleDeleteAudit}
-        canDeleteAudit={audit => canDeleteFiveSAudit(audit, actor)}
-        nav={<AuditNav />}
       />
     </PageContainer>
   );

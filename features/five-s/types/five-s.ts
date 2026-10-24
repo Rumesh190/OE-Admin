@@ -57,6 +57,8 @@ export interface FiveSEvidence {
    ========================================================= */
 
 export interface FiveSQuestion {
+  /** Explicit canonical reference only; absent on all legacy snapshots. */
+  departmentId?: string;
   id: string;
 
   category: FiveSAuditStage;
@@ -120,7 +122,18 @@ export interface FiveSSection {
    AUDIT
    ========================================================= */
 
+export interface AuditAssignmentEvent {
+  actorId: string; at: string; previousAuditorId?: string; previousAuditor: string; auditorId: string; auditor: string; reason: string;
+}
 export interface FiveSAudit {
+  policyVersion?: "ops-access-v4";
+  revision?: number;
+  organizationId?: string;
+  plantId?: string;
+  zoneId?: string;
+  assignedAuditorId?: string;
+  assignmentHistory?: AuditAssignmentEvent[];
+  signatureHistory?: NonNullable<FiveSAudit["auditorSignature"]>[];
   /** Absent on legacy audits; do not infer from scheduled or edited dates. */
   createdAt?: string;
   /** Immutable creation-time policy. Absent on legacy records. */

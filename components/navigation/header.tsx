@@ -1,10 +1,12 @@
 import Link from "next/link";
+import { ActiveAccessLabel } from "./active-access-label";
 import { ClipboardCheck } from "lucide-react";
 import { BreadcrumbNav } from "@/components/navigation/breadcrumb-nav";
 import { MobileNavDrawer } from "@/components/navigation/mobile-nav-drawer";
 import { NotificationBell } from "@/components/navigation/notification-bell";
 import { UserMenu } from "@/components/navigation/user-menu";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
+import { AccessContextSelector } from "./access-context-selector";
 
 /** Light contextual header; all product navigation lives in the sidebar. */
 function Header() {
@@ -12,7 +14,7 @@ function Header() {
     <div className="lg:hidden"><MobileNavDrawer /></div>
     <Link href="/dashboard" className="flex min-w-0 items-center gap-2 rounded-lg lg:hidden" aria-label="OE Dashboard"><span className="grid size-8 shrink-0 place-items-center rounded-lg bg-[var(--brand-accent)] text-[var(--brand-accent-foreground)]"><ClipboardCheck className="size-[18px]" /></span><span className="font-heading text-sm font-semibold">OE</span></Link>
     <div className="hidden min-w-0 sm:block"><BreadcrumbNav /></div>
-    <div className="ml-auto flex items-center gap-1.5"><ThemeToggle /><NotificationBell /><UserMenu /></div>
+    <div className="ml-auto flex items-center gap-1.5"><ActiveAccessLabel /><AccessContextSelector /><ThemeToggle /><NotificationBell /><UserMenu /></div>
   </header>;
 }
 

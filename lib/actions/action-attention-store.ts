@@ -51,6 +51,9 @@ let reminders: ActionReminder[] = [];
 let escalations: ActionEscalation[] = [];
 let snapshot = { reminders, escalations };
 let loaded = false;
+let committedReminders = reminders;
+let committedEscalations = escalations;
+let storageError: string | null = null;
 
 function load() {
   if (loaded || typeof window === "undefined") return;
@@ -64,16 +67,26 @@ function load() {
     reminders = [];
     escalations = [];
   }
+  committedReminders = reminders; committedEscalations = escalations;
   snapshot = { reminders, escalations };
 }
 
 function persist() {
-  snapshot = { reminders, escalations };
   if (typeof window !== "undefined") {
-    safeSetStorage(REMINDER_STORAGE_KEY, reminders);
-    safeSetStorage(ESCALATION_STORAGE_KEY, escalations);
+    if (reminders !== committedReminders) {
+      const result = safeSetStorage(REMINDER_STORAGE_KEY, reminders, { reportError: false });
+      if (result.success) committedReminders = reminders;
+      else { reminders = committedReminders; storageError = result.message; }
+    }
+    if (storageError) escalations = committedEscalations;
+    else if (escalations !== committedEscalations) {
+      const result = safeSetStorage(ESCALATION_STORAGE_KEY, escalations, { reportError: false });
+      if (result.success) committedEscalations = escalations;
+      else { escalations = committedEscalations; storageError = result.message; }
+    }
   }
-  listeners.forEach((listener) => listener());
+  if (snapshot.reminders !== reminders || snapshot.escalations !== escalations) snapshot = { reminders, escalations };
+  listeners.forEach(listener => listener());
 }
 
 function localDate(value: Date) {
@@ -112,9 +125,10 @@ function generateReminder(action: MyAction, type: ActionReminderType, recipientU
   const id = `REM-${action.id}-${type.replaceAll(" ", "-").toUpperCase()}-${recipientUserId}-${scheduledFor}`;
   if (reminders.some((item) => item.id === id)) return;
   const generatedAt = now.toISOString();
-  reminders = [{ id, actionId: action.id, type, recipientUserId, recipientRole, scheduledFor, generatedAt, status: "Generated" }, ...reminders];
   const title = type === "Due Soon" ? "Action due tomorrow" : type === "Due Today" ? "Action due today" : type === "Overdue" ? "Action overdue" : "Action still overdue";
-  createNotification({ recipientUserId, title, message: `${action.title} · ${action.id}`, href: `/actions/${encodeURIComponent(action.id)}` });
+  const notification = createNotification({ recipientUserId, title, message: `${action.title} · ${action.id}`, href: `/actions/${encodeURIComponent(action.id)}`, deduplicationKey: id });
+  if (!notification) return;
+  reminders = [{ id, actionId: action.id, type, recipientUserId, recipientRole, scheduledFor, generatedAt, status: "Generated" }, ...reminders];
   appendAttentionActivity(action.id, activity(id, "reminder_generated", recipientUserId, "OPS reminder service", generatedAt, type));
 }
 
@@ -123,20 +137,22 @@ function generateEscalation(action: MyAction, level: ActionEscalationLevel, toUs
   if (escalations.some((item) => item.id === id)) return;
   const createdAt = now.toISOString();
   const reason = `Action remains unresolved ${overdueDays} days after its due date.`;
+  const notification = createNotification({ recipientUserId: toUser.id, title: `Action escalated · Level ${level}`, message: `${action.title} · ${action.id} · ${reason}`, href: `/actions/${encodeURIComponent(action.id)}`, deduplicationKey: id });
+  if (!notification) return;
   escalations = [{ id, actionId: action.id, level, fromUserId, toUserId: toUser.id, toUserName: toUser.name, reason, createdAt, status: "Open" }, ...escalations];
-  createNotification({ recipientUserId: toUser.id, title: `Action escalated · Level ${level}`, message: `${action.title} · ${action.id} · ${reason}`, href: `/actions/${encodeURIComponent(action.id)}` });
   appendAttentionActivity(action.id, activity(id, "escalated", fromUserId, "OPS escalation service", createdAt, `Level ${level} escalated to ${toUser.name}. ${reason}`));
 }
 
 export function evaluateActionAttention(actions: readonly MyAction[], users: readonly AdminUser[], now = new Date()) {
   load();
+  if (storageError) return { reminders: [...reminders], escalations: [...escalations], storageError };
   const configuration = getActionConfiguration();
   const reminderConfig = configuration.reminders;
   const escalationRules = configuration.escalations.filter((rule) => rule.enabled).sort((a, b) => a.level - b.level);
   const today = localDate(now);
   actions.forEach((action) => {
     if (action.status === "Completed") {
-      escalations = escalations.map((item) => item.actionId === action.id && item.status !== "Resolved" ? { ...item, status: "Resolved", resolvedAt: action.closedAt ?? action.completedAt ?? now.toISOString() } : item);
+      if (escalations.some(item => item.actionId === action.id && item.status !== "Resolved")) escalations = escalations.map((item) => item.actionId === action.id && item.status !== "Resolved" ? { ...item, status: "Resolved", resolvedAt: action.closedAt ?? action.completedAt ?? now.toISOString() } : item);
       return;
     }
     if (["Pending Review", "Pending Auditor Review", "Awaiting Review"].includes(action.status)) return;
@@ -160,7 +176,7 @@ export function evaluateActionAttention(actions: readonly MyAction[], users: rea
     });
   });
   persist();
-  return { reminders: [...reminders], escalations: [...escalations] };
+  return { reminders: [...reminders], escalations: [...escalations], storageError };
 }
 
 export function acknowledgeActionEscalation(escalationId: string, actor: ActionActor) {
@@ -172,7 +188,7 @@ export function acknowledgeActionEscalation(escalationId: string, actor: ActionA
   escalations = escalations.map((item) => item.id === escalationId ? updated : item);
   appendAttentionActivity(escalation.actionId, activity(escalation.id, "escalation_acknowledged", actor.id, actor.name, acknowledgedAt, `Level ${escalation.level} escalation acknowledged.`));
   persist();
-  return updated;
+  return storageError ? undefined : updated;
 }
 
 export function getActionReminders(actionId: string) {
@@ -211,7 +227,21 @@ export function getActionAttentionMetrics(actions: readonly MyAction[], now = ne
   };
 }
 
+export function useActionAttentionStorageError() {
+  return useSyncExternalStore(
+    listener => { listeners.add(listener); return () => listeners.delete(listener); },
+    () => storageError,
+    () => null,
+  );
+}
+
+export function retryActionAttention(actions: readonly MyAction[], users: readonly AdminUser[]) {
+  storageError = null;
+  return evaluateActionAttention(actions, users);
+}
+
 export function resetActionAttentionState() {
+  storageError = null;
   reminders = [];
   escalations = [];
   loaded = true;

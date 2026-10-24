@@ -7,16 +7,16 @@ function isQuotaError(error: unknown) {
   return error instanceof DOMException && (error.name === "QuotaExceededError" || error.name === "NS_ERROR_DOM_QUOTA_REACHED" || error.code === 22 || error.code === 1014);
 }
 
-export function safeSetStorage(key: string, value: unknown): StorageResult {
+export function safeSetStorage(key: string, value: unknown, options?: { reportError?: boolean }): StorageResult {
   if (typeof window === "undefined") return { success: false, reason: "unavailable", message: "Browser storage is unavailable." };
   try { window.localStorage.setItem(key, JSON.stringify(value)); return { success: true }; }
-  catch (error) { console.error(`Unable to persist ${key}:`, error); return { success: false, reason: isQuotaError(error) ? "quota" : "unknown", message: isQuotaError(error) ? STORAGE_FULL_MESSAGE : "Unable to save this change. Please try again." }; }
+  catch (error) { if (options?.reportError !== false) console.error(`Unable to persist ${key}:`, error); return { success: false, reason: isQuotaError(error) ? "quota" : "unknown", message: isQuotaError(error) ? STORAGE_FULL_MESSAGE : "Unable to save this change. Please try again." }; }
 }
 
-export function safeSetStorageString(key: string, value: string): StorageResult {
+export function safeSetStorageString(key: string, value: string, options?: { reportError?: boolean }): StorageResult {
   if (typeof window === "undefined") return { success: false, reason: "unavailable", message: "Browser storage is unavailable." };
   try { window.localStorage.setItem(key, value); return { success: true }; }
-  catch (error) { console.error(`Unable to persist ${key}:`, error); return { success: false, reason: isQuotaError(error) ? "quota" : "unknown", message: isQuotaError(error) ? STORAGE_FULL_MESSAGE : "Unable to save this change. Please try again." }; }
+  catch (error) { if (options?.reportError !== false) console.error(`Unable to persist ${key}:`, error); return { success: false, reason: isQuotaError(error) ? "quota" : "unknown", message: isQuotaError(error) ? STORAGE_FULL_MESSAGE : "Unable to save this change. Please try again." }; }
 }
 
 export function cleanupObsoleteDemoStorage() {
