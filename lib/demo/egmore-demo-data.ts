@@ -38,12 +38,12 @@ function parse<T>(key: string, fallback: T): T {
   try { return JSON.parse(raw) as T; } catch { return fallback; }
 }
 
-function reconcileRows<T extends Row>(current: readonly T[], seeds: readonly T[]): T[] {
+function reconcileRows<Current extends Row, Seed extends Row>(current: readonly Current[], seeds: readonly Seed[]): Array<Current | Seed> {
   const seedIds = new Set(seeds.map(item => item.id));
   return [...seeds, ...current.filter(item => !seedIds.has(item.id))];
 }
 
-function includeMissingRows<T extends Row>(current: readonly T[], seeds: readonly T[]): T[] {
+function includeMissingRows<Current extends Row, Seed extends Row>(current: readonly Current[], seeds: readonly Seed[]): Array<Current | Seed> {
   const currentIds = new Set(current.map(item => item.id));
   return [...current, ...seeds.filter(item => !currentIds.has(item.id))];
 }
@@ -172,7 +172,7 @@ function moduleWrites() {
     { id: "RA-EGM-DL-MEENA", personId: "USR-MEENA", role: "Department Leader", zoneId: "ZONE-D", departmentId: "DEPT-EGM-ZD-WAREHOUSE" },
   ].map(item => ({ ...item, organizationId: ABC_ORGANIZATION_ID, plantId: EGMORE_FACTORY_ID, status: "Active", assignedBy: PLATFORM_PERSON_ID, assignedAt: STAMP, revision: 1 }));
   const configuration = parse<{ plants: Array<Row & JsonObject>; zones: Array<Row & JsonObject> }>(CONFIGURATION_KEY, { plants: [], zones: [] });
-  const rosterIds = new Set(roster.map(person => person.id));
+  const rosterIds = new Set<string>(roster.map(person => person.id));
   const egmoreSeed = ORGANIZATION_PLANT_SEEDS.find(plant => plant.id === EGMORE_FACTORY_ID)!;
   const hasEgmore = configuration.plants.some(plant => plant.id === EGMORE_FACTORY_ID);
   return {

@@ -109,11 +109,11 @@ describe('Action Type start boundaries and compatibility',()=>{
   const directory=await import('@/features/five-s/administration/store');const user=directory.getAdminUser(m.leader.id)!;
   const status=user.status;user.status='Inactive';expect(m.actions.startAssignedAction(item.id,m.leader,'immediate')).toBeUndefined();user.status=status;
   expect(values.get('standalone-5s-actions')).toBe(before);
-  const access=await import('@/lib/module-entitlements');m.identity.setDemoRole('superAdmin');expect(access.saveOrganizationAccess('abc-manufacturing',{...access.getOrganizationAccess(),audit:false})).toBe(true);m.identity.setDemoRole('leader');
+  const access=await import('@/lib/module-entitlements');m.identity.setDemoRole('superAdmin');expect(access.saveFactoryAccess('abc-manufacturing','PLANT-EGM',{...access.getOrganizationAccess(),audit:false})).toBe(true);m.identity.setDemoRole('leader');
   expect(m.actions.startAssignedAction(item.id,m.leader,'immediate')).toBeUndefined();
-  m.identity.setDemoRole('superAdmin');access.saveOrganizationAccess('abc-manufacturing',{...access.getOrganizationAccess(),audit:true,actions:false});m.identity.setDemoRole('leader');
+  m.identity.setDemoRole('superAdmin');access.saveFactoryAccess('abc-manufacturing','PLANT-EGM',{...access.getOrganizationAccess(),audit:true,actions:false});m.identity.setDemoRole('leader');
   expect(m.actions.startAssignedAction(item.id,m.leader,'immediate')).toBeUndefined();
-  m.identity.setDemoRole('superAdmin');access.saveOrganizationAccess('abc-manufacturing',{...access.getOrganizationAccess(),actions:true});m.identity.setDemoRole('leader');
+  m.identity.setDemoRole('superAdmin');access.saveFactoryAccess('abc-manufacturing','PLANT-EGM',{...access.getOrganizationAccess(),actions:true});m.identity.setDemoRole('leader');
   m.actions.setActions([{...item,organizationId:'other-org'} as typeof item & {organizationId:string}]);
   expect(m.actions.startAssignedAction(item.id,m.leader,'immediate')).toBeUndefined();
  });

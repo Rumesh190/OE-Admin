@@ -1,3 +1,4 @@
+import { provisionedClientAdministrator } from "./helpers/client-administrator";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { authenticateDemoFixture } from "./helpers/demo-session";
 import type { FiveSAudit } from "@/features/five-s/types/five-s";
@@ -27,8 +28,9 @@ export async function setup() {
   const people = await import("@/features/five-s/administration/store");
   const factoryAuth = await import("@/features/five-s/administration/factory-authorization");
   const client = legacy.saveClientProfile({ name: "Synthetic Audit Tenant", industry: "Manufacturing" });
-  const ca = legacy.assignClientAdministrator(client.id, { person: { name: "Synthetic Client Admin", email: "ca@synthetic.invalid", employeeId: "CA-SYN" } });
-  current.setAdministrationDemoIdentity(ca.id); const factory = legacy.saveFactory(client.id, { name: "Synthetic factory", code: "SYN", location: "Test" });
+  const ca = await provisionedClientAdministrator(client.id);
+  const factory = legacy.saveFactory(client.id, { name: "Synthetic factory", code: "SYN", location: "Test", maximumActiveUsers: 30 });
+  current.setAdministrationDemoIdentity(ca.id);
   function select(personId: string, kind: "platform" | "client" | "factory" = "factory") {
     if (personId === "USR-OPS-SUPER-ADMIN") current.setDemoRole("superAdmin"); else if (personId === "USR-LAKSHMAN") current.setDemoRole("auditor"); else current.setAdministrationDemoIdentity(personId);
     const base = { version: 1 as const, personId, selectionId: "" };
@@ -47,7 +49,7 @@ export async function setup() {
   select(ca.id, "client"); legacy.assignFactoryAdministrator(client.id, factory.id, coordinator.id); legacy.assignFactoryAdministrator(client.id, factory.id, faVerifier.id); select("USR-LAKSHMAN"); legacy.saveAuditorAuthorization(client.id, factory.id, auditor.id, [za.id, zb.id]);
   // Isolated activated fixture only. No application activation operation exists or runs here.
   const active = structuredClone(state.getAccessV3State()); active.clients = active.clients.map(c => c.id === client.id ? { ...c, operationalState: "Active" as const } : c); storage.setItem(state.ACCESS_V3_KEY, JSON.stringify(active));
-  const modules = await import("@/lib/modules"); storage.setItem("ops-organization-modules-v1", JSON.stringify({ [client.id]: Object.fromEntries(Object.keys(modules.DEFAULT_MODULE_ENTITLEMENTS).map(k => [k, k === "audit"])) }));
+  const modules = await import("@/lib/modules"); storage.setItem("ops-organization-modules-v1", JSON.stringify({ [client.id]: Object.fromEntries(Object.keys(modules.DEFAULT_MODULE_ENTITLEMENTS).map(k => [k, k === "audit" || k === "actions"])) }));
   storage.setItem("standalone-5s-actions", "[]"); storage.setItem("manufacturing-qms-five-s-audits-v1", "[]");
   const auditStore = await import("@/lib/five-s/audit-store"); const actionStore = await import("@/lib/actions/action-store"); const service = await import("@/lib/actions/audit-corrective-actions"); const policy = await import("@/lib/actions/action-v4-policy"); const auditPolicy = await import("@/lib/five-s/audit-authorization"); const assets = await import("@/lib/actions/action-v4-assets");
   const auditExpected = (a: FiveSAudit) => ({ selectionId: context.getActiveAccessContext()!.selectionId, revision: a.revision! });
@@ -76,9 +78,9 @@ describe("Batch 3 scoped Audit and canonical corrective Actions", () => {
     expect(() => s.auditStore.updateFiveSAudit(a.id, { sections: a.sections })).toThrow(/revision/); expect([...s.values]).toEqual(before);
     s.current.setDemoRole("leader"); expect(s.auditStore.getFiveSAuditById(a.id)).toBeUndefined(); expect(s.auditPolicy.canExecuteScopedAudit(a)).toBe(false);
   });
-  it("preserves direct FA execution and explicit ZL Auditor grant with own-Zone exclusion", async () => {
+  it("preserves direct FA execution and explicit assigned-member execution", async () => {
     const s = await setup(); const a = s.createAudit(undefined, s.za.id, s.auditor.id, false); expect(() => s.createAudit(null, s.zb.id, s.auditor.id, false)).toThrow(/eligible authorized auditor/); const own = { ...a, zoneId: s.zb.id };
-    s.select(s.auditor.id); expect(s.auditPolicy.canExecuteScopedAudit(a, s.auditor.id, "start")).toBe(true); expect(s.auditPolicy.canExecuteScopedAudit(own, s.auditor.id, "start")).toBe(false);
+    s.select(s.auditor.id); expect(s.auditPolicy.canExecuteScopedAudit(a, s.auditor.id, "start")).toBe(true); expect(s.auditPolicy.canExecuteScopedAudit(own, s.auditor.id, "start")).toBe(true);
     const started = s.auditStore.startScheduledFiveSAudit(a.id, new Date(), s.auditExpected(a)); expect(started?.status).toBe("In Progress");
     s.select(s.coordinator.id); const direct = s.createAudit(undefined, s.za.id, s.coordinator.id); expect(s.auditPolicy.canExecuteScopedAudit(direct)).toBe(true);
     s.select(s.ca.id, "client"); expect(s.auditPolicy.canExecuteScopedAudit(direct)).toBe(false);
@@ -102,10 +104,10 @@ describe("Batch 3 scoped Audit and canonical corrective Actions", () => {
     s.auditStore.updateFiveSAudit(a.id, { auditorSignature: sig }, s.current.getCurrentDemoUser(), s.auditExpected(a)); const signed = s.latestAudit(a.id);
     expect(s.auditStore.completeFiveSAudit(a.id, signed.sections, s.current.getCurrentDemoUser(), s.auditExpected(signed))?.status).toBe("Completed"); expect(s.policy.readCanonicalActions()[0].status).toBe("Assigned");
   });
-  it("narrows task access without general Actions entitlement and excludes unrelated/foreign task readers", async () => {
+  it("requires Actions entitlement and excludes unrelated/foreign task readers", async () => {
     const s = await setup(); const t = await s.task(); s.select(s.owner.id);
     expect(s.policy.canReadV4Action(t.action)).toBe(true); expect(s.policy.narrowAuditTaskHref(`/actions/${t.action.id}`)).toBe(true); expect(s.policy.narrowAuditTaskHref("/actions")).toBe(false);
-    const access = await import("@/lib/module-entitlements"); expect(access.getOrganizationAccess(s.client.id).actions).toBe(false);
+    const access = await import("@/lib/module-entitlements"); expect(access.getOrganizationAccess(s.client.id).actions).toBe(true);
     s.select(s.foreign.id); expect(s.policy.canReadV4Action(t.action)).toBe(false); expect(s.actionStore.getActionById(t.action.id)).toBeUndefined();
   });
   it("allows draft work without verifier and prevents submission without explicit independent selection", async () => {

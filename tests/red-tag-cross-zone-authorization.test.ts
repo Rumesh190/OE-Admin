@@ -105,9 +105,9 @@ describe('Red Tag cross-zone creation and evaluator separation',()=>{
  });
  it('rejects disabled entitlements and missing target leadership without reserving IDs',async()=>{
   const m=await setup();const entitlements=await import('@/lib/module-entitlements');m.identity.setDemoRole('superAdmin');
-  entitlements.saveOrganizationAccess(entitlements.DEMO_ORGANIZATION.id,{...entitlements.getOrganizationAccess(),redTag:false});m.identity.setDemoRole('auditor');
+  entitlements.saveFactoryAccess(entitlements.DEMO_ORGANIZATION.id,"PLANT-EGM",{...entitlements.getOrganizationAccess(),redTag:false});m.identity.setDemoRole('auditor');
   const before=JSON.stringify([...values]);expect(m.store.createRedTagV2(m.input,m.actor)).toBeUndefined();expect(JSON.stringify([...values])).toBe(before);
-  m.identity.setDemoRole('superAdmin');entitlements.saveOrganizationAccess(entitlements.DEMO_ORGANIZATION.id,{...entitlements.getOrganizationAccess(),redTag:true});m.identity.setDemoRole('auditor');
+  m.identity.setDemoRole('superAdmin');entitlements.saveFactoryAccess(entitlements.DEMO_ORGANIZATION.id,"PLANT-EGM",{...entitlements.getOrganizationAccess(),redTag:true});m.identity.setDemoRole('auditor');
   m.organization.getOrganizationZone('Zone B')!.leaderId='';
   const missing=JSON.stringify([...values]);expect(m.store.createAndSubmitRedTagV2(m.input,m.actor,m.reviewer)).toBeUndefined();expect(JSON.stringify([...values])).toBe(missing);
  });

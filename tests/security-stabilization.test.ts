@@ -21,24 +21,30 @@ describe("Security stabilization: entitlement command authority", () => {
   it.each(["responsible", "leader", "auditor"] as const)("rejects authenticated %s, including a spoofed Super Admin argument, without writes", async role => {
     const m = await api(); m.identity.setDemoRole(role);
     const before = [...values], access = m.modules.getOrganizationAccess("xyz-components");
-    expect(Reflect.apply(m.modules.saveOrganizationAccess, undefined, ["xyz-components", { ...access, redTag: true }, { ...m.identity.DEMO_USERS.superAdmin }])).toBe(false);
+    expect(Reflect.apply(m.modules.saveFactoryAccess, undefined, ["xyz-components", "PLANT-XYZ", { ...access, redTag: true }, { ...m.identity.DEMO_USERS.superAdmin }])).toBe(false);
     expect([...values]).toEqual(before); expect(m.modules.getOrganizationAccess("xyz-components")).toEqual(access);
   });
   it("preserves authorized platform Save, organization isolation and reload", async () => {
-    const m = await api(); m.identity.setDemoRole("superAdmin"); const abc = m.modules.getOrganizationAccess(); const xyz = m.modules.getOrganizationAccess("xyz-components");
-    expect(m.modules.saveOrganizationAccess("xyz-components", { ...xyz, redTag: true })).toBe(true);
-    expect(m.modules.getOrganizationAccess()).toEqual(abc); vi.resetModules();
-    expect((await import("@/lib/module-entitlements")).getOrganizationAccess("xyz-components").redTag).toBe(true);
+    const m = await api(); m.identity.setDemoRole("superAdmin");
+    const abc = m.modules.getFactoryAccess("abc-manufacturing", "PLANT-EGM");
+    const organizations = await import("@/features/five-s/administration/access-v3-store");
+    const client = organizations.saveClientProfile({ name: "Isolated Test Client", industry: "Test" });
+    const factory = organizations.saveFactory(client.id, { name: "Isolated Test Factory", code: "ITF", location: "Test", maximumActiveUsers: 10 });
+    expect(m.modules.saveFactoryAccess(client.id, factory.id, { ...m.modules.NEW_FACTORY_ACCESS, redTag: true })).toBe(true);
+    expect(m.modules.getFactoryAccess("abc-manufacturing", "PLANT-EGM")).toEqual(abc); vi.resetModules();
+    const reloaded = await import("@/lib/module-entitlements");
+    expect(reloaded.normalizeFactoryAccess(JSON.parse(values.get(m.modules.FACTORY_MODULE_ACCESS_KEY) ?? "{}" )).factories[factory.id].redTag).toBe(true);
+    expect(JSON.parse(values.get(m.modules.FACTORY_MODULE_ACCESS_KEY) ?? "{}").factories[factory.id].redTag).toBe(true);
     expect(values.get("unrelated-data")).toBe("intact");
   });
   it("rejects signed-out, disabled and unknown organization writes; getter references cannot mutate entitlements", async () => {
     const m = await api(); m.identity.setDemoRole("superAdmin"); const access = m.modules.getOrganizationAccess();
     const copy = m.modules.getOrganizationAccess(); copy.actions = false; expect(m.modules.getOrganizationAccess().actions).toBe(access.actions);
-    values.delete("5s-auth-session"); let before = [...values]; expect(m.modules.saveOrganizationAccess("abc-manufacturing", access)).toBe(false); expect([...values]).toEqual(before);
+    values.delete("5s-auth-session"); let before = [...values]; expect(m.modules.saveFactoryAccess("abc-manufacturing", "PLANT-EGM", access)).toBe(false); expect([...values]).toEqual(before);
     authenticateDemoFixture(); m.directory.getAdminUser(m.identity.DEMO_USERS.superAdmin.id)!.status = "Inactive";
-    before = [...values]; expect(m.modules.saveOrganizationAccess("abc-manufacturing", access)).toBe(false); expect([...values]).toEqual(before);
+    before = [...values]; expect(m.modules.saveFactoryAccess("abc-manufacturing", "PLANT-EGM", access)).toBe(false); expect([...values]).toEqual(before);
     m.directory.getAdminUser(m.identity.DEMO_USERS.superAdmin.id)!.status = "Active";
-    expect(m.modules.saveOrganizationAccess("UNKNOWN", access)).toBe(false);
+    expect(m.modules.saveFactoryAccess("UNKNOWN", "UNKNOWN", access)).toBe(false);
   });
 });
 
@@ -92,7 +98,7 @@ describe("Security stabilization: canonical Action creation", () => {
     const m = await api();
     unchanged(() => m.actions.createAction({ ...manual, source: "Red Tag", sourceModule: "redTag", sourceId: "MISSING" }));
     unchanged(() => m.actions.createAction({ ...manual, sourceModule: "redTag", sourceId: "MISSING" }));
-    m.identity.setDemoRole("superAdmin"); expect(m.modules.saveOrganizationAccess("abc-manufacturing", { ...m.modules.getOrganizationAccess(), actions: false })).toBe(true);
+    m.identity.setDemoRole("superAdmin"); expect(m.modules.saveFactoryAccess("abc-manufacturing", "PLANT-EGM", { ...m.modules.getOrganizationAccess(), actions: false })).toBe(true);
     m.identity.setDemoRole("auditor"); unchanged(() => m.actions.createAction(manual));
   });
   it("keeps fixture replacement, reset and clearing unavailable in production", async () => {
@@ -102,7 +108,7 @@ describe("Security stabilization: canonical Action creation", () => {
 });
 
 async function enableLegacyImprovement(m: Awaited<ReturnType<typeof api>>) {
-  m.identity.setDemoRole("superAdmin"); expect(m.modules.saveOrganizationAccess("abc-manufacturing", { ...m.modules.getOrganizationAccess(), visualImprovement: true })).toBe(true); m.identity.setDemoRole("auditor");
+  m.identity.setDemoRole("superAdmin"); expect(m.modules.saveFactoryAccess("abc-manufacturing", "PLANT-EGM", { ...m.modules.getOrganizationAccess(), visualImprovement: true })).toBe(true); m.identity.setDemoRole("auditor");
 }
 describe("Security stabilization: canonical source integrations", () => {
   it("permits authorized Gemba, rejects missing/foreign children and duplicate direct creation", async () => {

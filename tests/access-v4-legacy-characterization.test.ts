@@ -56,7 +56,7 @@ beforeEach(() => {
     factoryMemberships: ["ZL", "ZM"].map(id => ({ ...stamp, id: `FM-${id}`, userId: id, organizationId: "CLIENT", plantId: "PLANT", status: "Active", baseRole: id === "ZL" ? "Zone Leader" : "Zone Member" })),
     zoneAllocations: [{ ...stamp, id: "ZA-ZL", userId: "ZL", organizationId: "CLIENT", plantId: "PLANT", zoneId: "ZA", responsibility: "Leader", status: "Active" }],
     factoryAdmins: [{ id: "FA-1", userId: "FA", organizationId: "CLIENT", plantId: "PLANT", status: "Active", assignedBy: "CA", assignedAt: "2026-01-01" }],
-    auditorGrants: [{ id: "GRANT", userId: "ZL", organizationId: "CLIENT", plantId: "PLANT", zoneIds: ["ZA", "ZB", "ZC"], status: "Active", grantedBy: "FA", grantedAt: "2026-01-01" }], events: [],
+    auditorGrants: [{ id: "GRANT", userId: "ZL", organizationId: "CLIENT", plantId: "PLANT", zoneIds: ["ZA", "ZB", "ZC"], status: "Active", grantedBy: "FA", grantedAt: "2026-01-01" }], factoryRequests: [], events: [],
   };
 });
 
@@ -108,13 +108,14 @@ describe("unchanged v3 policy bodies with read-only synthetic dependencies", () 
     fixture.actorId = "CA";
     expect(canExecuteScopedAudit(audit(), "CA")).toBe(false);
   });
-  it("revocation invalidates future execution but retains grant and Audit history", () => {
+  it("revocation invalidates future grant eligibility while retaining explicit active-member assignments and Audit history", () => {
     fixture.actorId = "ZL";
     const record = audit();
     const before = structuredClone(record);
     expect(canExecuteScopedAudit(record, "ZL")).toBe(true);
     fixture.state.auditorGrants[0].status = "Revoked";
-    expect(canExecuteScopedAudit(record, "ZL")).toBe(false);
+    expect(resolveFactoryPerson("ZL", context).canAuditZone).toBe(false);
+    expect(canExecuteScopedAudit(record, "ZL")).toBe(true);
     expect(fixture.state.auditorGrants).toHaveLength(1);
     expect(record).toEqual(before);
   });

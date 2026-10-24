@@ -1,3 +1,4 @@
+import { provisionedClientAdministrator } from "./helpers/client-administrator";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { authenticateDemoFixture } from "./helpers/demo-session";
 async function setup() {
@@ -16,9 +17,9 @@ async function setup() {
   const context = await import("@/features/five-s/administration/access-v4-context");
   const persistence = await import("@/lib/administration-v4-storage");
   const org = commands.saveClientProfile({ name: "Synthetic client", industry: "Test" });
-  const ca = commands.assignClientAdministrator(org.id, { person: { name: "Test Admin", email: "admin@example.invalid", employeeId: "TEST-CA" } });
+  const ca = await provisionedClientAdministrator(org.id);
+  const plant = commands.saveFactory(org.id, { name: "Test Factory", code: "TF", location: "Test", maximumActiveUsers: 30 });
   current.setAdministrationDemoIdentity(ca.id);
-  const plant = commands.saveFactory(org.id, { name: "Test Factory", code: "TF", location: "Test" });
   commands.assignFactoryAdministrator(org.id, plant.id, ca.id);
   const zone = commands.saveFactoryZone(org.id, plant.id, { name: "Test Zone", code: "TZ", department: "Legacy string" });
   const zone2 = commands.saveFactoryZone(org.id, plant.id, { name: "Second Zone", code: "Z2", department: "Legacy second" });
@@ -55,7 +56,8 @@ describe("Batch 1 protected administration", () => {
     await expect(s.v4.saveDepartment({ organizationId: "abc-manufacturing", plantId: "PLANT-EGM", zoneId: "ZONE-A" }, { name: "Bad", code: "B", status: "Active" }, s.expected())).rejects.toThrow(/context/);
     expect([...s.values]).toEqual(before);
     s.current.setDemoRole("superAdmin");
-    expect(() => s.context.validateAccessContext({ version: 1, selectionId: "test", personId: "USR-OPS-SUPER-ADMIN", kind: "factory", ...s.scope })).toThrow();
+    expect(s.context.validateAccessContext({ version: 1, selectionId: "test", personId: "USR-OPS-SUPER-ADMIN", kind: "factory", ...s.scope }).kind).toBe("factory");
+    expect(s.state.getAccessV3State().factoryAdmins.some(item => item.userId === "USR-OPS-SUPER-ADMIN")).toBe(false);
   });
   it("prevents cross-Zone leadership and Department assignment", async () => {
     const s = await setup(); const d = await s.department();
@@ -99,9 +101,9 @@ describe("Batch 1 protected administration", () => {
   it("new-client entitlements deny by default and remain staged even with configured flags; ABC/XYZ unchanged", async () => {
     const s = await setup(); const access = await import("@/lib/module-entitlements");
     expect(s.org.operationalState).toBe("Staged"); expect(Object.values(access.getOrganizationAccess(s.org.id)).every(v => v === false)).toBe(true);
-    expect(access.getOrganizationAccess("abc-manufacturing").audit).toBe(true); expect(access.getOrganizationAccess("xyz-components").gemba).toBe(false);
+    expect(access.getFactoryAccess("abc-manufacturing", "PLANT-EGM").audit).toBe(true); expect(access.getOrganizationAccess("xyz-components").gemba).toBe(false);
     s.current.setDemoRole("superAdmin");
-    expect(access.saveOrganizationAccess(s.org.id, { ...access.getOrganizationAccess("abc-manufacturing") })).toBe(true);
+    expect(access.saveFactoryAccess(s.org.id, s.plant.id, { ...access.getFactoryAccess("abc-manufacturing", "PLANT-EGM") })).toBe(true);
     expect(access.getOrganizationAccess(s.org.id).audit).toBe(false); expect(access.getOrganizationAccess("unknown-client").audit).toBe(false);
   });
   it("only SA can attach a reviewed identity; no roles or old membership changes", async () => {
@@ -142,10 +144,12 @@ describe("Batch 1 protected administration", () => {
   });
   it("persists an identity-bound context across module reload and invalidates it after identity change", async () => {
     const s = await setup(); const original = s.context.getActiveAccessContext();
+    if (!original) throw new Error("Expected selected factory fixture");
     vi.resetModules(); const reloaded = await import("@/features/five-s/administration/access-v4-context");
     expect(reloaded.getActiveAccessContext()).toEqual(original);
     const current = await import("@/lib/current-user"); current.setDemoRole("superAdmin");
-    expect(() => reloaded.getActiveAccessContext()).toThrow(/current identity/);
+    expect(reloaded.getActiveAccessContext()).toBeNull();
+    expect(() => reloaded.validateAccessContext(original)).toThrow(/current identity/);
   });
   it("retains a recoverable journal if rollback itself fails", async () => {
     const s = await setup(); const key = s.persistence.V4_STORAGE_KEY; const journalKey = "ops-access-v3-pending-transaction-v1";

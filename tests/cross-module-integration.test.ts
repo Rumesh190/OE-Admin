@@ -93,7 +93,7 @@ describe('real Gemba creation and durable links',()=>{
   const r=await import('@/lib/relationships/relationship-store');expect(r.getIncomingRelationships({module:'continuousImprovement',recordId:item.id})).toHaveLength(1);
  });
  it('rejects creation when the target CI module is disabled',async()=>{
-  const {actor,observation,commands}=await setup('Opportunity');const modules=await import('@/lib/module-entitlements');const identity=await import('@/lib/current-user');identity.setDemoRole('superAdmin');expect(modules.saveOrganizationAccess(modules.DEMO_ORGANIZATION.id,{...modules.getOrganizationAccess(),continuousImprovement:false})).toBe(true);identity.setDemoRole('auditor');
+  const {actor,observation,commands}=await setup('Opportunity');const modules=await import('@/lib/module-entitlements');const identity=await import('@/lib/current-user');identity.setDemoRole('superAdmin');expect(modules.saveFactoryAccess(modules.DEMO_ORGANIZATION.id,"PLANT-EGM",{...modules.getOrganizationAccess(),continuousImprovement:false})).toBe(true);identity.setDemoRole('auditor');
   await expect(commands.createImprovementFromGemba(observation.gembaId,observation.id,{title:'Title',issueDescription:'Context',estimatedTime:1,estimatedTimeUnit:'Days',ownerId:'USR-RITIKA',memberIds:[]},actor,()=>{})).rejects.toThrow('cannot create');
   expect([...values.keys()].some(k=>k.includes('record-sequence'))).toBe(false);
  });

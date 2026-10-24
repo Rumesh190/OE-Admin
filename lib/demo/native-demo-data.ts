@@ -194,7 +194,7 @@ function extendMvpModules(seed: JsonObject, configuration: JsonObject): JsonObje
 }
 
 function extendMvpManifest(seed: JsonObject, abcAdministrator: JsonObject, current: JsonObject, disposableOrganizations: Set<string>): JsonObject {
-  const personas = array(seed.personas, "Embedded personas").map(persona => ({ ...persona, organizationId: persona.role === "Platform Super Admin" ? undefined : IQ_ORGANIZATION_ID, plantId: persona.role === "Client Administrator" || persona.role === "Platform Super Admin" ? undefined : IQ_BYD_PLANT_ID }));
+  const personas: JsonObject[] = array(seed.personas, "Embedded personas").map(persona => ({ ...persona, organizationId: persona.role === "Platform Super Admin" ? undefined : IQ_ORGANIZATION_ID, plantId: persona.role === "Client Administrator" || persona.role === "Platform Super Admin" ? undefined : IQ_BYD_PLANT_ID }));
   const canonical = [...personas, { personId: abcAdministrator.id, name: abcAdministrator.name, role: "Client Administrator", organizationId: "abc-manufacturing" }, ...ADDITIONAL_CLIENTS.map(item => ({ personId: item.personId, name: item.admin, role: "Client Administrator", organizationId: item.id }))];
   const ids = new Set(canonical.map(persona => String(persona.personId)));
   const preserved = array(current.personas ?? [], "Current persona manifest").filter(persona => typeof persona.organizationId === "string" && !disposableOrganizations.has(persona.organizationId) && !ids.has(String(persona.personId)));

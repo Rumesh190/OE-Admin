@@ -1,3 +1,4 @@
+import { provisionedClientAdministrator, seedLegacyClientAdministrator } from "./helpers/client-administrator";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { authenticateDemoFixture } from "./helpers/demo-session";
 import type { FactoryUserInput } from "@/features/five-s/administration/access-v3-store";
@@ -21,16 +22,16 @@ async function setup() {
 async function factorySetup() {
     const s = await setup();
     const organization = s.commands.saveClientProfile({ name: "Phase 1 Client", industry: "Manufacturing" });
-    const ca = s.commands.assignClientAdministrator(organization.id, { person: s.person });
+    const ca = await provisionedClientAdministrator(organization.id);
+    const plant = s.commands.saveFactory(organization.id, { name: "Factory One", code: "ONE", location: "Test", maximumActiveUsers: 30 });
     s.current.setAdministrationDemoIdentity(ca.id);
-    const plant = s.commands.saveFactory(organization.id, { name: "Factory One", code: "ONE", location: "Test" });
     s.commands.assignFactoryAdministrator(organization.id, plant.id, ca.id);
     const zone = s.commands.saveFactoryZone(organization.id, plant.id, { name: "Shared name", code: "S", department: "Production" });
     return { ...s, organization, ca, plant, zone };
 }
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 describe("Access v3 Phase 1 administration hierarchy", () => {
-    it("adds stable clients without touching existing entitlements, directory or operational data and persists profile edits", async () => {
+    it("adds stable clients with automatic administrators while retaining existing identities and entitlements and persists profile edits", async () => {
         const s = await setup();
         s.storage.setItem("ops-organization-modules-v1", JSON.stringify({ "abc-manufacturing": { audit: false } }));
         const entitlement = s.storage.getItem("ops-organization-modules-v1");
@@ -39,7 +40,8 @@ describe("Access v3 Phase 1 administration hierarchy", () => {
         const b = s.commands.saveClientProfile({ name: "Second Client", industry: "Services" });
         expect(a.id).not.toBe(b.id);
         expect(s.commands.saveClientProfile({ id: a.id, name: "Renamed Client", industry: "Manufacturing" }).id).toBe(a.id);
-        expect(s.directory.getAdminUsers()).toEqual(users);
+        expect(s.directory.getAdminUsers().filter(person => users.some(original => original.id === person.id))).toEqual(users);
+        expect(s.directory.getAdminUsers()).toHaveLength(users.length + 2);
         expect(s.storage.getItem("ops-organization-modules-v1")).toBe(entitlement);
         vi.resetModules();
         const reloaded = await import("@/lib/organizations");
@@ -74,12 +76,12 @@ describe("Access v3 Phase 1 administration hierarchy", () => {
         expect(() => s.commands.assignFactoryAdministrator("abc-manufacturing", "PLANT-EGM", s.ca.id)).toThrow();
         expect(s.commands.administrationFactories(s.organization.id).map(p => p.id)).toContain(s.plant.id);
         const access = await import("@/lib/module-entitlements");
-        expect(access.saveOrganizationAccess(s.organization.id, access.getOrganizationAccess(s.organization.id))).toBe(false);
+        expect(access.saveFactoryAccess(s.organization.id, s.plant.id, access.getOrganizationAccess(s.organization.id))).toBe(false);
         const gemba = await import("@/features/gemba/gemba-access");
         const ci = await import("@/features/five-s/continuous-improvement/access");
         const actor = s.current.getCurrentDemoUser();
-        expect(gemba.canConductGembaWalk([], actor)).toBe(false);
-        expect(ci.canCreateImprovement(s.ca, actor)).toBe(false);
+        expect(gemba.canConductGembaWalk([], actor)).toBe(true);
+        expect(ci.canCreateImprovement(s.ca, actor)).toBe(true);
     });
     it.each(["Admin", "Auditor", "Reviewer", "Factory Admin", "Client Admin", "Super Admin", "Viewer"])("rejects elevated factory base role %s without writes", async (baseRole) => {
         const s = await factorySetup();
@@ -102,7 +104,9 @@ describe("Access v3 Phase 1 administration hierarchy", () => {
         const s = await factorySetup();
         const actions = await import("@/lib/actions/action-store");
         const originalActions = structuredClone(actions.getActions());
-        const second = s.commands.saveFactory(s.organization.id, { name: "Factory Two", code: "TWO", location: "Test" });
+        s.current.setDemoRole("superAdmin");
+        const second = s.commands.saveFactory(s.organization.id, { name: "Factory Two", code: "TWO", location: "Test", maximumActiveUsers: 30 });
+        s.current.setAdministrationDemoIdentity(s.ca.id);
         s.commands.assignFactoryAdministrator(s.organization.id, second.id, s.ca.id);
         const z2 = s.commands.saveFactoryZone(s.organization.id, second.id, { name: "Shared name", code: "S", department: "Production" });
         const z3 = s.commands.saveFactoryZone(s.organization.id, s.plant.id, { name: "Other Zone", code: "O", department: "Production" });
@@ -121,7 +125,9 @@ describe("Access v3 Phase 1 administration hierarchy", () => {
         const s = await factorySetup();
         const person = s.commands.saveFactoryUser(s.organization.id, s.plant.id, { person: { name: "Factory Admin", email: "fa@test.invalid", employeeId: "EMP-FA" }, baseRole: "Zone Member", zoneIds: [] });
         s.commands.assignFactoryAdministrator(s.organization.id, s.plant.id, person.id);
-        const second = s.commands.saveFactory(s.organization.id, { name: "Other factory", code: "OTHER", location: "Test" });
+        s.current.setDemoRole("superAdmin");
+        const second = s.commands.saveFactory(s.organization.id, { name: "Other factory", code: "OTHER", location: "Test", maximumActiveUsers: 30 });
+        s.current.setAdministrationDemoIdentity(s.ca.id);
         s.current.setAdministrationDemoIdentity(person.id);
         const before = [...s.values];
         expect(() => s.commands.saveFactoryUser(s.organization.id, second.id, { userId: person.id, baseRole: "Zone Member", zoneIds: [] })).toThrow();
@@ -129,7 +135,7 @@ describe("Access v3 Phase 1 administration hierarchy", () => {
         expect(() => s.commands.assignClientAdministrator(s.organization.id, { userId: person.id })).toThrow();
         expect(() => s.commands.saveFactory(s.organization.id, { id: s.plant.id, name: "Unauthorized edit", code: "ONE", location: "Test" })).toThrow();
         const access = await import("@/lib/module-entitlements");
-        expect(access.saveOrganizationAccess(s.organization.id, access.getOrganizationAccess(s.organization.id))).toBe(false);
+        expect(access.saveFactoryAccess(s.organization.id, s.plant.id, access.getOrganizationAccess(s.organization.id))).toBe(false);
         expect([...s.values]).toEqual(before);
     });
     it("rejects unauthenticated, inactive and forged current actors", async () => {
@@ -189,9 +195,9 @@ describe("Access v3 Phase 1 administration hierarchy", () => {
         s.current.setDemoRole("superAdmin");
         const access = await import("@/lib/module-entitlements");
         const old = structuredClone(access.getOrganizationAccess("abc-manufacturing"));
-        expect(access.saveOrganizationAccess(s.organization.id, { ...access.getOrganizationAccess(s.organization.id), audit: false })).toBe(true);
+        expect(access.saveFactoryAccess(s.organization.id, s.plant.id, { ...access.NEW_FACTORY_ACCESS, audit: false })).toBe(true);
         s.current.setAdministrationDemoIdentity(s.ca.id);
-        expect(access.saveOrganizationAccess(s.organization.id, { ...access.getOrganizationAccess(s.organization.id), audit: true })).toBe(false);
+        expect(access.saveFactoryAccess(s.organization.id, s.plant.id, { ...access.getOrganizationAccess(s.organization.id), audit: true })).toBe(false);
         expect(access.getOrganizationAccess(s.organization.id).audit).toBe(false);
         expect(access.getOrganizationAccess("abc-manufacturing")).toEqual(old);
         vi.resetModules();
@@ -219,7 +225,7 @@ describe("Access v3 Phase 1 administration hierarchy", () => {
         const actions = await import("@/lib/actions/action-store");
         const actionBefore = structuredClone(actions.getActions());
         const original = structuredClone(s.directory.getAdminUser("USR-SIVA-KUMAR"));
-        const ca = s.commands.assignClientAdministrator("abc-manufacturing", { person: s.person });
+        const ca = await seedLegacyClientAdministrator();
         s.current.setAdministrationDemoIdentity(ca.id);
         s.commands.assignFactoryAdministrator("abc-manufacturing", "PLANT-EGM", ca.id);
         s.commands.saveFactoryUser("abc-manufacturing", "PLANT-EGM", { userId: "USR-SIVA-KUMAR", baseRole: "Zone Leader", zoneIds: ["ZONE-A", "ZONE-B"] });

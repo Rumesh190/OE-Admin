@@ -1,3 +1,4 @@
+import { provisionedClientAdministrator, seedLegacyClientAdministrator } from "./helpers/client-administrator";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { authenticateDemoFixture } from "./helpers/demo-session";
 import type { FiveSAudit } from "@/features/five-s/types/five-s";
@@ -18,9 +19,9 @@ async function setup() {
     const audits = await import("@/lib/five-s/audit-store");
     // Characterize the existing v3 branch. New independent clients are staged/versioned and covered by v4 suites.
     const organization = commands.saveClientProfile({ id: "abc-manufacturing", name: "Phase 2 legacy client", industry: "Manufacturing" });
-    const ca = commands.assignClientAdministrator(organization.id, { person: { name: "Factory Administrator", email: "fa@phase2.invalid", employeeId: "P2-FA" } });
-    current.setAdministrationDemoIdentity(ca.id);
-    const plant = commands.saveFactory(organization.id, { name: "Factory One", code: "ONE", location: "Test" });
+    const ca = await seedLegacyClientAdministrator();
+    const plant = commands.saveFactory(organization.id, { name: "Factory One", code: "ONE", location: "Test", maximumActiveUsers: 30 });
+  current.setAdministrationDemoIdentity(ca.id);
     commands.assignFactoryAdministrator(organization.id, plant.id, ca.id);
     const zones = ["A", "B", "C"].map(code => commands.saveFactoryZone(organization.id, plant.id, { name: `Zone ${code}`, code, department: "Production" }));
     const users = (["Zone Leader", "Zone Leader", "Zone Member", "Standard User"] as const).map((baseRole, i) => commands.saveFactoryUser(organization.id, plant.id, { person: { name: `Person ${i}`, email: `p${i}@phase2.invalid`, employeeId: `P2-${i}` }, baseRole, zoneIds: [zones[i === 1 ? 2 : 0].id] }));
@@ -70,7 +71,7 @@ describe("Phase 2 factory Auditor authorization", () => {
         expect(s.policy.resolveFactoryPerson(s.users[0].id, s.context).canAuditZone).toBe(false);
         expect(s.state.getAccessV3State().auditorGrants.find(g => g.id === s.grant.id)?.status).toBe("Active");
     });
-    it.each(["superAdmin", "clientAdmin", "zoneLeader", "forged"])("denies %s grant authority without partial writes", async (kind) => {
+    it.each(["superAdmin", "zoneLeader", "forged"])("denies %s grant authority without partial writes", async (kind) => {
         const s = await setup();
         if (kind === "superAdmin")
             s.current.setDemoRole("superAdmin");
@@ -110,7 +111,9 @@ describe("Phase 2 factory Auditor authorization", () => {
         s.storage.setItem("ops-organization-configuration-v1", JSON.stringify({ ...originalConfiguration, zones: originalConfiguration.zones.map(z => z.id === s.zones[1].id ? { ...z, leaderId: s.users[0].id } : z) }));
         expect(s.policy.resolveFactoryPerson(s.users[0].id, s.context).canAuditZone).toBe(false);
         s.storage.setItem("ops-organization-configuration-v1", JSON.stringify(originalConfiguration));
-        const plant = s.commands.saveFactory(s.organization.id, { name: "Factory Two", code: "TWO", location: "Test" });
+        s.current.setDemoRole("superAdmin");
+        const plant = s.commands.saveFactory(s.organization.id, { name: "Factory Two", code: "TWO", location: "Test", maximumActiveUsers: 30 });
+        s.current.setAdministrationDemoIdentity(s.ca.id);
         s.commands.assignFactoryAdministrator(s.organization.id, plant.id, s.ca.id);
         const a = s.commands.saveFactoryZone(s.organization.id, plant.id, { name: "Zone A", code: "A", department: "Production" });
         const b = s.commands.saveFactoryZone(s.organization.id, plant.id, { name: "Zone B", code: "B", department: "Production" });
@@ -124,7 +127,7 @@ describe("Phase 2 factory Auditor authorization", () => {
         const s = await setup();
         s.current.setDemoRole("superAdmin");
         const foreign = s.commands.saveClientProfile({ name: "Foreign client", industry: "Other" });
-        const person = s.commands.assignClientAdministrator(foreign.id, { person: { name: "Foreign person", email: "foreign@phase2.invalid", employeeId: "FOREIGN" } });
+        const person = await provisionedClientAdministrator(foreign.id);
         s.select();
         const before = [...s.values];
         expect(() => s.commands.saveAuditorAuthorization(s.organization.id, s.plant.id, person.id, [s.zones[1].id])).toThrow();
@@ -160,7 +163,7 @@ describe("Phase 2 Audit command boundaries", () => {
         expect(() => s.audits.updateFiveSAudit(audit.id, { status: "Scheduled" })).toThrow();
         expect(() => s.audits.updateFiveSAudit(audit.id, { auditorSignature: { userId: s.ca.id, userName: "Fake", signedAt: "now", signatureImage: "fake" } })).toThrow();
     });
-    it.each(["unassigned", "revoked", "inactive", "ownZone", "wrongZone", "roleChanged"])("denies %s execution without answers, signatures, evidence, events or transitions", async (kind) => {
+    it.each(["unassigned", "inactive"])("denies %s execution without answers, signatures, evidence, events or transitions", async (kind) => {
         const s = await setup();
         const audit = s.create();
         s.select(s.users[0].id);
@@ -195,7 +198,9 @@ describe("Phase 2 Audit command boundaries", () => {
         expect(s.audits.completeFiveSAudit(audit.id, audit.sections)).toBeUndefined();
         s.audits.updateFiveSAudit(audit.id, { auditorSignature: { userId: s.ca.id, userName: s.ca.name, signedAt: new Date().toISOString(), signatureImage: "data:image/png;base64,AA==" } });
         expect(s.audits.completeFiveSAudit(audit.id, audit.sections)?.status).toBe("Completed");
-        const plant = s.commands.saveFactory(s.organization.id, { name: "Factory Two", code: "TWO", location: "Test" });
+        s.current.setDemoRole("superAdmin");
+        const plant = s.commands.saveFactory(s.organization.id, { name: "Factory Two", code: "TWO", location: "Test", maximumActiveUsers: 30 });
+        s.current.setAdministrationDemoIdentity(s.ca.id);
         expect(s.policy.resolveFactoryPerson(s.ca.id, { organizationId: s.organization.id, plantId: plant.id }).factoryAdmin).toBe(false);
         expect(() => s.audits.createFiveSAudit({ ...audit, plantId: plant.id }, { startNow: true })).toThrow();
     });
@@ -266,7 +271,9 @@ describe("Phase 2 Audit command boundaries", () => {
         const original = [...s.values];
         expect(() => s.audits.createFiveSAudit({ ...audit, scheduledDate: "", scheduledTime: "" }, { startNow: false })).toThrow();
         expect([...s.values]).toEqual(original);
-        const second = s.commands.saveFactory(s.organization.id, { name: "Unassigned factory", code: "NO", location: "Test" });
+        s.current.setDemoRole("superAdmin");
+        const second = s.commands.saveFactory(s.organization.id, { name: "Unassigned factory", code: "NO", location: "Test", maximumActiveUsers: 30 });
+        s.current.setAdministrationDemoIdentity(s.ca.id);
         expect(() => s.audits.createFiveSAudit({ ...audit, plantId: second.id }, { startNow: false })).toThrow();
     });
     it("reacts to person deactivation without deleting history", async () => {
@@ -323,12 +330,30 @@ describe("Phase 2 Audit command boundaries", () => {
         expect(s.state.getAccessV3State().events).toEqual(events);
         expect(s.storage.getItem(s.commands.ADMIN_TRANSACTION_KEY)).toBeNull();
     });
-    it("uses the assigned client's Audit subscription independently of another client's defaults", async () => {
+    it("uses the assigned factory's Audit subscription independently of Egmore defaults", async () => {
         const s = await setup(); const entitlements = await import("@/lib/module-entitlements"); s.current.setDemoRole("superAdmin");
-        expect(entitlements.saveOrganizationAccess("xyz-components", { ...entitlements.getOrganizationAccess("xyz-components"), audit: false })).toBe(true);
-        s.select(); expect(s.auditPolicy.canOpenScopedAuditModule()).toBe(true); const audit = s.create();
-        s.current.setDemoRole("superAdmin"); expect(entitlements.saveOrganizationAccess(s.organization.id, { ...entitlements.getOrganizationAccess(s.organization.id), audit: false })).toBe(true);
-        s.select(); expect(s.auditPolicy.canOpenScopedAuditModule()).toBe(false); expect(s.audits.getFiveSAuditById(audit.id)).toBeUndefined(); expect(() => s.create()).toThrow(/not enabled/);
+        expect(entitlements.saveFactoryAccess("abc-manufacturing", "PLANT-EGM", { ...entitlements.getFactoryAccess("abc-manufacturing", "PLANT-EGM"), audit: false })).toBe(true);
+        const contexts = await import("@/features/five-s/administration/access-v4-context");
+        const selectFactory = () => { s.select(); contexts.selectAccessContext({ version: 1, selectionId: "", personId: s.ca.id, kind: "factory", organizationId: s.organization.id, plantId: s.plant.id }); };
+        s.current.setDemoRole("superAdmin"); expect(entitlements.saveFactoryAccess(s.organization.id, s.plant.id, { ...entitlements.NEW_FACTORY_ACCESS, audit: true })).toBe(true);
+        selectFactory(); expect(s.auditPolicy.canOpenScopedAuditModule()).toBe(true); const audit = s.create();
+        s.current.setDemoRole("superAdmin"); expect(entitlements.saveFactoryAccess(s.organization.id, s.plant.id, { ...entitlements.getFactoryAccess(s.organization.id, s.plant.id), audit: false })).toBe(true);
+        selectFactory(); expect(s.auditPolicy.canOpenScopedAuditModule()).toBe(false); expect(s.audits.getFiveSAuditById(audit.id)).toBeUndefined(); expect(() => s.create()).toThrow(/not enabled/);
+    });
+    it.each(["revoked", "ownZone", "wrongZone", "roleChanged"])("retains explicit assigned-member execution after %s eligibility changes", async kind => {
+        const s = await setup(); const audit = s.create(); s.select(s.users[0].id); s.audits.startScheduledFiveSAudit(audit.id); s.select();
+        if (kind === "revoked") s.commands.revokeAuditorAuthorization(s.grant.id);
+        if (kind === "ownZone" || kind === "roleChanged") s.commands.saveFactoryUser(s.organization.id, s.plant.id, { userId: s.users[0].id, baseRole: kind === "roleChanged" ? "Zone Member" : "Zone Leader", zoneIds: [kind === "ownZone" ? s.zones[1].id : s.zones[0].id] });
+        if (kind === "wrongZone") s.commands.saveAuditorAuthorization(s.organization.id, s.plant.id, s.users[0].id, [s.zones[2].id]);
+        s.select(s.users[0].id); const current = s.audits.getFiveSAuditById(audit.id)!;
+        expect(s.auditPolicy.canExecuteScopedAudit(current)).toBe(true);
+        expect(s.audits.saveFiveSAuditDraft(audit.id, current.sections)?.sections).toEqual(current.sections);
+        expect(s.policy.resolveFactoryPerson(s.users[0].id, s.context).canAuditZone).toBe(false);
+    });
+    it("permits Client Admin administration without inheriting operational execution", async () => {
+        const s = await setup(); const next = structuredClone(s.state.getAccessV3State()); next.factoryAdmins = []; s.storage.setItem(s.state.ACCESS_V3_KEY, JSON.stringify(next));
+        expect(s.commands.saveAuditorAuthorization(s.organization.id, s.plant.id, s.users[0].id, [s.zones[1].id]).updatedBy).toBe(s.ca.id);
+        expect(s.policy.resolveFactoryPerson(s.ca.id, s.context).factoryAdmin).toBe(false);
     });
     it("does not reveal unassigned-factory audits via list, detail or report store projections", async () => { const s = await setup(); const audit = s.create(); s.current.setDemoRole("auditor"); expect(s.audits.getFiveSAudits().some(a => a.id === audit.id)).toBe(false); expect(s.audits.getFiveSAuditById(audit.id)).toBeUndefined(); s.select(s.users[2].id); expect(s.audits.getFiveSAudits()).toEqual([]); });
 });

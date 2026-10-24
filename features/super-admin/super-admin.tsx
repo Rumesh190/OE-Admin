@@ -48,7 +48,7 @@ function OrganizationTabs({ organization, active }: { organization: Organization
     { label: "Factories", href: `/super-admin/organizations/${organization.id}/factories`, id: "factories" },
   ] as const;
   return <nav aria-label="Organization sections" className="flex gap-1 overflow-x-auto border-b border-border/70">
-    {items.map((item) => "href" in item ? <Link key={item.label} href={item.href} aria-current={active === item.id ? "page" : undefined} className={`relative shrink-0 px-3 py-2.5 text-sm font-medium ${active === item.id ? "text-primary after:absolute after:inset-x-2 after:bottom-0 after:h-0.5 after:bg-primary" : "text-muted-foreground hover:text-foreground"}`}>{item.label}</Link> : <span key={item.label} aria-disabled className="shrink-0 cursor-default px-3 py-2.5 text-sm font-medium text-muted-foreground/60">{item.label}</span>)}
+    {items.map((item) => <Link key={item.label} href={item.href} aria-current={active === item.id ? "page" : undefined} className={`relative shrink-0 px-3 py-2.5 text-sm font-medium ${active === item.id ? "text-primary after:absolute after:inset-x-2 after:bottom-0 after:h-0.5 after:bg-primary" : "text-muted-foreground hover:text-foreground"}`}>{item.label}</Link>)}
   </nav>;
 }
 

@@ -65,7 +65,8 @@ function UserMenu() {
   const hierarchy = ready ? getCanonicalProfileHierarchy() : { platform: null, clients: [] }
   const query = profileSearch.trim().toLocaleLowerCase()
   const clients = filterHierarchy(hierarchy.clients, query)
-  const platformVisible = Boolean(hierarchy.platform && (!query || profileText(hierarchy.platform).includes(query) || "metric mind".includes(query)))
+  const platform = hierarchy.platform
+  const platformVisible = Boolean(platform && (!query || profileText(platform).includes(query) || "metric mind".includes(query)))
 
   async function prepareDemo(reset = false) {
     setDemoPending(true); setSwitchError("")
@@ -127,7 +128,7 @@ function UserMenu() {
         <DropdownMenuSeparator/>
         {NATIVE_DEMO_ENABLED && <><div className="px-2 pb-1 pt-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Switch profile</div>{switchError && <p role="alert" className="px-2 py-1 text-sm text-destructive">{switchError}</p>}<DropdownMenuGroup>
           {(hierarchy.platform || hierarchy.clients.length > 0) ? <><div className="relative mx-1 mb-1"><Search className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground"/><Input aria-label="Search profiles, clients, factories and roles" className="h-8 pl-7 text-xs" placeholder="Search profiles or factories" value={profileSearch} onChange={event => setProfileSearch(event.target.value)} onKeyDown={event => event.stopPropagation()}/></div>
-            {platformVisible && hierarchy.platform && <DropdownMenuItem disabled={demoPending} onClick={() => chooseProfile(hierarchy.platform.personId, { kind: "platform" })}><Shield/><span className="min-w-0 flex-1"><span className="block">Metric Mind</span><span className="block text-xs text-muted-foreground">Platform Super Admin</span></span>{activeTarget(hierarchy.platform.personId, { kind: "platform" }) && <Check className="text-primary"/>}</DropdownMenuItem>}
+            {platformVisible && platform && <DropdownMenuItem disabled={demoPending} onClick={() => chooseProfile(platform.personId, { kind: "platform" })}><Shield/><span className="min-w-0 flex-1"><span className="block">Metric Mind</span><span className="block text-xs text-muted-foreground">Platform Super Admin</span></span>{activeTarget(platform.personId, { kind: "platform" }) && <Check className="text-primary"/>}</DropdownMenuItem>}
             {platformVisible && clients.length > 0 && <DropdownMenuSeparator/>}
             {query ? clients.map(searchResults) : clients.map(clientMenu)}
             {!platformVisible && clients.length === 0 && <p className="px-2 py-5 text-center text-sm text-muted-foreground">No matching profiles.</p>}

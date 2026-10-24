@@ -39,7 +39,7 @@ export function AccessContextBoundary({ children }: { children: React.ReactNode 
   const narrowOperational = (auditPath && canOpenScopedAuditModule()) || narrowAuditTaskHref(path) || entitledDemoModule;
   if (!administration && (error || (!isLegacyABCOperationalContext(context) && !narrowOperational))) {
     if (error) return <ModuleAvailability title="Scope unavailable" description={error}/>;
-    if (context?.kind !== "platform" && capability) {
+    if (context && context.kind !== "platform" && capability) {
       const enabled = getOrganizationAccess(context.organizationId)[capability.id];
       if (!enabled) return <ModuleAvailability title="Access unavailable" description={`${capability.label} is not enabled for the selected factory.`}/>;
       return <ModuleAvailability title="Access unavailable" description={`Your current role and factory context do not permit this ${capability.label} operation.`}/>;

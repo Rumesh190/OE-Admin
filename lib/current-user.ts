@@ -96,14 +96,14 @@ function getSnapshot(): DemoUser {
     const person = getAdminUser(selected);
     const role = resolveCanonicalProfileRole(selected, selectedTarget());
     const key = JSON.stringify([selected, person?.name, person?.status, role]);
-    if (key !== administrationIdentityKey) { administrationIdentityKey = key; administrationIdentity = { id: selected, name: person?.name ?? "Unavailable administration identity", role, initials: "AD", plant: person?.plant ?? "", primaryZone: "", isSuperAdmin: false }; }
-    return administrationIdentity!;
+    if (!administrationIdentity || key !== administrationIdentityKey) { administrationIdentityKey = key; administrationIdentity = { id: selected, name: person?.name ?? "Unavailable administration identity", role, initials: "AD", plant: person?.plant ?? "", primaryZone: "", isSuperAdmin: false }; }
+    return administrationIdentity;
   }
   const identity = DEMO_USERS[activeRole];
   const person = getAdminUser(identity.id);
   const role = resolveCanonicalProfileRole(identity.id, selectedTarget());
   const key = JSON.stringify([identity.id, person?.name ?? identity.name, role]);
-  if (key !== administrationIdentityKey) { administrationIdentityKey = key; administrationIdentity = { ...identity, name: person?.name ?? identity.name, role }; }
+  if (!administrationIdentity || key !== administrationIdentityKey) { administrationIdentityKey = key; administrationIdentity = { ...identity, name: person?.name ?? identity.name, role }; }
   return administrationIdentity;
 }
 

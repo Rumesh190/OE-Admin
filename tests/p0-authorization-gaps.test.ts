@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 beforeEach(() => {
   vi.resetModules(); const values = new Map([["ops-red-tag-original-reset-v1", "done"]]);
-  vi.stubGlobal("window", { alert: vi.fn(), localStorage: {
+  vi.stubGlobal("window", { dispatchEvent: vi.fn(), alert: vi.fn(), localStorage: {
     getItem: (key: string) => values.get(key) ?? null,
     setItem: (key: string, value: string) => values.set(key, value),
     removeItem: (key: string) => values.delete(key),
@@ -27,7 +27,7 @@ describe("P0 unresolved authorization acceptance", () => {
     const store = await import("@/lib/module-entitlements");
     const before = { ...store.getOrganizationAccess("xyz-components") };
     let rejected = false;
-    try { rejected = store.saveOrganizationAccess("xyz-components", { ...before, redTag: true }) === false; } catch { rejected = true; }
+    try { rejected = store.saveFactoryAccess("xyz-components", "PLANT-XYZ", { ...before, redTag: true }) === false; } catch { rejected = true; }
     expect(rejected, "Only authorized platform administrators may mutate module entitlements").toBe(true);
     expect(store.getOrganizationAccess("xyz-components")).toEqual(before);
   });
