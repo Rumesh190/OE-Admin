@@ -11,7 +11,7 @@ import { useAdminUsers } from "@/features/five-s/administration/store"
 import { switchFinalDemoPersona, type DemoPersonaTarget } from "@/lib/demo/switch-final-persona"
 import { getCanonicalProfileHierarchy, type CanonicalClientProfiles, type CanonicalFactoryProfiles, type CanonicalProfile } from "@/lib/demo/canonical-profiles"
 import { getFinalDemoManifest } from "@/lib/demo/final-demo"
-import { initializeNativeRoleDemo, NATIVE_DEMO_ENABLED, resetNativeRoleDemo } from "@/lib/demo/native-demo-data"
+import { initializeNativeRoleDemo, resetNativeRoleDemo } from "@/lib/demo/native-demo-data"
 import { useOrganizationConfiguration } from "@/lib/organization-store"
 import { useOrganizations } from "@/lib/organizations"
 import { useCurrentUser } from "@/lib/current-user"
@@ -62,7 +62,7 @@ function UserMenu() {
   useAccessV3State(); useAccessV4State(); useAdminUsers(true); useOrganizations(); useOrganizationConfiguration()
   const currentUser = useCurrentUser()
   const { language, setLanguage, t } = useI18n()
-  const { logout } = useAuth()
+  const { logout, demoEnabled } = useAuth()
   const hierarchy = ready ? getCanonicalProfileHierarchy() : { platform: null, clients: [] }
   const query = profileSearch.trim().toLocaleLowerCase()
   const clients = filterHierarchy(hierarchy.clients, query)
@@ -127,7 +127,7 @@ function UserMenu() {
       <DropdownMenuContent align="end" className="max-h-[85dvh] w-80 overflow-y-auto">
         <div className="flex flex-col gap-0.5 px-2 py-1.5"><span className="truncate text-sm font-medium text-foreground">{currentUser.name}</span><span className="truncate text-xs text-muted-foreground">{currentUser.role}</span></div>
         <DropdownMenuSeparator/>
-        {NATIVE_DEMO_ENABLED && <><div className="px-2 pb-1 pt-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Switch profile</div>{switchError && <p role="alert" className="px-2 py-1 text-sm text-destructive">{switchError}</p>}<DropdownMenuGroup>
+        {demoEnabled && <><div className="px-2 pb-1 pt-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Switch profile</div>{switchError && <p role="alert" className="px-2 py-1 text-sm text-destructive">{switchError}</p>}<DropdownMenuGroup>
           {(hierarchy.platform || hierarchy.clients.length > 0) ? <><div className="relative mx-1 mb-1"><Search className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground"/><Input aria-label="Search profiles, clients, factories and roles" className="h-8 pl-7 text-xs" placeholder="Search profiles or factories" value={profileSearch} onChange={event => setProfileSearch(event.target.value)} onKeyDown={event => event.stopPropagation()}/></div>
             {platformVisible && platform && <DropdownMenuItem disabled={demoPending} onClick={() => chooseProfile(platform.personId, { kind: "platform" })}><Shield/><span className="min-w-0 flex-1"><span className="block">Metric Mind</span><span className="block text-xs text-muted-foreground">Platform Super Admin</span></span>{activeTarget(platform.personId, { kind: "platform" }) && <Check className="text-primary"/>}</DropdownMenuItem>}
             {platformVisible && clients.length > 0 && <DropdownMenuSeparator/>}

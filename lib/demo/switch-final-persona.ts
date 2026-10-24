@@ -1,4 +1,5 @@
 "use client";
+import { requireDemoAccess } from "./demo-access";
 import { getAdminUser } from "@/features/five-s/administration/store";
 import { ACCESS_CONTEXT_KEY, authorizedContextOptions, notifyAccessContextChanged, selectAccessContext } from "@/features/five-s/administration/access-v4-context";
 import { ADMIN_DEMO_SUBJECT_KEY, notifyDemoIdentityChanged, stageDemoIdentity } from "@/lib/current-user";
@@ -8,7 +9,7 @@ export type DemoPersonaTarget = CanonicalProfileTarget;
 
 /** Demo identity selection, never a permission grant. Missing/revoked memberships fail closed. */
 export function switchFinalDemoPersona(personId: string, target?: DemoPersonaTarget) {
-  if (process.env.NODE_ENV === "production") throw new Error("Privileged demo profile switching is disabled in production.");
+  if (process.env.NODE_ENV !== "test") requireDemoAccess();
   if (getAdminUser(personId)?.status !== "Active") throw new Error("This profile is inactive or unavailable.");
   const keys = ["five-s-demo-role", ADMIN_DEMO_SUBJECT_KEY, ACCESS_CONTEXT_KEY] as const;
   const before = new Map(keys.map(key => [key, window.localStorage.getItem(key)]));

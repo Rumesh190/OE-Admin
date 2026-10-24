@@ -98,8 +98,9 @@ it.each(["populated", "unsupported-manifest", "unsupported-schema"])("preserves 
 });
 it("blocks privileged switching, native initialization and reset in public production", async () => {
   const s = await setup("production"); const { switchFinalDemoPersona } = await import("@/lib/demo/switch-final-persona"); const before = [...s.values];
-  expect(s.native.NATIVE_DEMO_ENABLED).toBe(false);
-  expect(() => switchFinalDemoPersona("USR-OPS-SUPER-ADMIN", { kind: "platform" })).toThrow(/disabled in production/);
-  await expect(s.native.initializeNativeRoleDemo()).rejects.toThrow(/development only/); await expect(s.native.resetNativeRoleDemo()).rejects.toThrow(/development only/);
+  const access = await import("@/lib/demo/demo-access");
+  expect(access.isDemoAccessEnabled()).toBe(false);
+  expect(() => switchFinalDemoPersona("USR-OPS-SUPER-ADMIN", { kind: "platform" })).toThrow(/authorized demo access/);
+  await expect(s.native.initializeNativeRoleDemo()).rejects.toThrow(/authorized demo access/); await expect(s.native.resetNativeRoleDemo()).rejects.toThrow(/authorized demo access/);
   expect([...s.values]).toEqual(before);
 });

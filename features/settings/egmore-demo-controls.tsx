@@ -23,7 +23,7 @@ export function EgmoreDemoControls() {
 
   return <section className="border-t pt-6">
     <div className="max-w-2xl">
-      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">Development demo</p>
+      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">Authorized demo</p>
       <h2 className="mt-2 font-semibold">Egmore client demonstration</h2>
       <p className="mt-1 text-sm text-muted-foreground">Prepare the canonical ABC Manufacturing · Egmore Plant dataset and enable its registered OE modules. The action uses stable IDs and preserves unmarked operational records.</p>
       <div className="mt-4 flex flex-wrap gap-2">

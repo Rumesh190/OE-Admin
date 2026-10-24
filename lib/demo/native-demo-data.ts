@@ -1,4 +1,5 @@
 "use client";
+import { requireDemoAccess } from "./demo-access";
 
 import { refreshCanonicalActionStore } from "@/lib/actions/action-store";
 import { refreshFiveSAuditStore } from "@/lib/five-s/audit-store";
@@ -10,8 +11,6 @@ import { notifyAccessV4 } from "@/features/five-s/administration/access-v4-state
 import { ADMIN_USER_SEEDS, refreshAdminDirectory } from "@/features/five-s/administration/store";
 import { NEW_FACTORY_ACCESS } from "@/lib/module-entitlements";
 import { switchFinalDemoPersona } from "./switch-final-persona";
-
-export const NATIVE_DEMO_ENABLED = process.env.NODE_ENV === "development";
 
 const DIRECTORY_KEY = "five-s-administration-users-v1";
 const CONFIGURATION_KEY = "ops-organization-configuration-v1";
@@ -218,7 +217,8 @@ function notify(keys: string[]) {
 }
 
 async function rebuildNativeRoleDemo(): Promise<void> {
-  if (!NATIVE_DEMO_ENABLED || typeof window === "undefined") throw new Error("Native demo initialization is available in development only.");
+  requireDemoAccess();
+  if (typeof window === "undefined") throw new Error("Demo initialization requires a browser.");
   const data = await fixture();
   const seedV3 = extendMvpAccess(object(decodeSeed(data, ACCESS_V3_KEY), "Embedded access data"));
   const seedClients = array(seedV3.clients, "Embedded clients");
@@ -332,7 +332,8 @@ async function rebuildNativeRoleDemo(): Promise<void> {
 
 /** First-time initialization is deliberately separate from the explicitly confirmed reset. */
 export async function initializeNativeRoleDemo(): Promise<void> {
-  if (!NATIVE_DEMO_ENABLED || typeof window === "undefined") throw new Error("Native demo initialization is available in development only.");
+  requireDemoAccess();
+  if (typeof window === "undefined") throw new Error("Demo initialization requires a browser.");
   const manifest = localStorage.getItem(MANIFEST_KEY);
   if (manifest !== null) {
     const { getFinalDemoManifest } = await import("./final-demo");

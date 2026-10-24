@@ -1,4 +1,5 @@
 "use client";
+import { requireDemoAccess } from "./demo-access";
 
 import { CONTINUOUS_IMPROVEMENT_SEED_RECORDS, CONTINUOUS_IMPROVEMENT_STORAGE_KEY } from "@/features/five-s/continuous-improvement/store";
 import { RED_TAG_STORAGE_KEY } from "@/features/five-s/red-tag/store";
@@ -232,7 +233,8 @@ function moduleWrites() {
 }
 
 export async function prepareEgmoreDemoData() {
-  if (process.env.NODE_ENV !== "development" || typeof window === "undefined") throw new Error("Egmore demo preparation is available in development only.");
+  requireDemoAccess();
+  if (typeof window === "undefined") throw new Error("Egmore demo preparation requires a browser.");
   const writes = moduleWrites();
   const previous = new Map(Object.keys(writes).map(key => [key, window.localStorage.getItem(key)]));
   try { Object.entries(writes).forEach(([key, value]) => window.localStorage.setItem(key, JSON.stringify(value))); }
