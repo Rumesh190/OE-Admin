@@ -217,7 +217,7 @@ function notify(keys: string[]) {
   keys.forEach(key => window.dispatchEvent(new StorageEvent("storage", { key, storageArea: window.localStorage })));
 }
 
-export async function initializeNativeRoleDemo(): Promise<void> {
+async function rebuildNativeRoleDemo(): Promise<void> {
   if (!NATIVE_DEMO_ENABLED || typeof window === "undefined") throw new Error("Native demo initialization is available in development only.");
   const data = await fixture();
   const seedV3 = extendMvpAccess(object(decodeSeed(data, ACCESS_V3_KEY), "Embedded access data"));
@@ -330,4 +330,22 @@ export async function initializeNativeRoleDemo(): Promise<void> {
   switchFinalDemoPersona(PLATFORM_PERSON_ID);
 }
 
-export const resetNativeRoleDemo = initializeNativeRoleDemo;
+/** First-time initialization is deliberately separate from the explicitly confirmed reset. */
+export async function initializeNativeRoleDemo(): Promise<void> {
+  if (!NATIVE_DEMO_ENABLED || typeof window === "undefined") throw new Error("Native demo initialization is available in development only.");
+  const manifest = localStorage.getItem(MANIFEST_KEY);
+  if (manifest !== null) {
+    const { getFinalDemoManifest } = await import("./final-demo");
+    if (!getFinalDemoManifest()) throw new Error("Unsupported or incomplete demo manifest. Existing data was preserved; review the saved dataset.");
+    const { getAccessV3State } = await import("@/features/five-s/administration/access-v3-state");
+    const { getAccessV4State } = await import("@/features/five-s/administration/access-v4-state");
+    getAccessV3State(); getAccessV4State();
+    return; // Do not reset identity, assignments, edits, revisions or history on repeated initialization.
+  }
+  if ([DIRECTORY_KEY, CONFIGURATION_KEY, ACTIONS_KEY, AUDITS_KEY, ACCESS_V3_KEY, ACCESS_V4_KEY].some(key => localStorage.getItem(key) !== null)) {
+    throw new Error("This browser already contains workspace data. Initialization did not change it. Use a fresh browser profile for the demo, or review the explicit reset separately.");
+  }
+  await rebuildNativeRoleDemo();
+}
+
+export const resetNativeRoleDemo = rebuildNativeRoleDemo;

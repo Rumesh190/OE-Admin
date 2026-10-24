@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { initializeCurrentAccessContext } from "@/features/five-s/administration/access-v4-context";
 import { hasAuthenticatedDemoSession } from "@/lib/demo-session";
 import { safeSetStorage, safeSetStorageString } from "@/lib/browser-storage";
 
@@ -16,6 +17,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   React.useEffect(() => {
     let cancelled = false;
     const isAuthenticated = hasAuthenticatedDemoSession();
+    if (isAuthenticated) {
+      try { initializeCurrentAccessContext(); }
+      catch { /* Preserve invalid/unsupported data; the access boundary displays its error. */ }
+    }
     queueMicrotask(() => {
       if (cancelled) return;
       setAuthenticated(isAuthenticated);
@@ -23,7 +28,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
     return () => { cancelled = true; };
   }, []);
-  const login = React.useCallback(async (username: string, password: string) => { await new Promise((resolve) => window.setTimeout(resolve, 280)); const expectedPassword = window.localStorage.getItem(DEMO_PASSWORD_KEY) ?? "admin"; if (username !== "admin" || password !== expectedPassword) return false; const result = safeSetStorage(AUTH_KEY, { authenticated: true, username: "admin", version: 1 } satisfies DemoAuthSession); if (!result.success) return false; setAuthenticated(true); return true; }, []);
+  const login = React.useCallback(async (username: string, password: string) => { await new Promise((resolve) => window.setTimeout(resolve, 280)); const expectedPassword = window.localStorage.getItem(DEMO_PASSWORD_KEY) ?? "admin"; if (username !== "admin" || password !== expectedPassword) return false; const result = safeSetStorage(AUTH_KEY, { authenticated: true, username: "admin", version: 1 } satisfies DemoAuthSession); if (!result.success) return false; try { initializeCurrentAccessContext(); } catch { /* Access boundary reports the preserved invalid scope. */ } setAuthenticated(true); return true; }, []);
   const logout = React.useCallback(() => { localStorage.removeItem(AUTH_KEY); setAuthenticated(false); }, []);
   const changePassword = React.useCallback(async (currentPassword: string, newPassword: string): Promise<PasswordChangeResult> => {
     await new Promise((resolve) => window.setTimeout(resolve, 180));

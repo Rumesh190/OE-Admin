@@ -10,6 +10,7 @@ import { useAccessV4State } from "@/features/five-s/administration/access-v4-sta
 import { useAdminUsers } from "@/features/five-s/administration/store"
 import { switchFinalDemoPersona, type DemoPersonaTarget } from "@/lib/demo/switch-final-persona"
 import { getCanonicalProfileHierarchy, type CanonicalClientProfiles, type CanonicalFactoryProfiles, type CanonicalProfile } from "@/lib/demo/canonical-profiles"
+import { getFinalDemoManifest } from "@/lib/demo/final-demo"
 import { initializeNativeRoleDemo, NATIVE_DEMO_ENABLED, resetNativeRoleDemo } from "@/lib/demo/native-demo-data"
 import { useOrganizationConfiguration } from "@/lib/organization-store"
 import { useOrganizations } from "@/lib/organizations"
@@ -133,6 +134,7 @@ function UserMenu() {
             {query ? clients.map(searchResults) : clients.map(clientMenu)}
             {!platformVisible && clients.length === 0 && <p className="px-2 py-5 text-center text-sm text-muted-foreground">No matching profiles.</p>}
           </> : <DropdownMenuItem disabled={demoPending} onClick={() => void prepareDemo()}><Database/><span className="min-w-0 flex-1"><span className="block">Initialize role demo</span><span className="block text-xs text-muted-foreground">Create canonical demo identities</span></span></DropdownMenuItem>}
+          {!getFinalDemoManifest() && (hierarchy.platform || hierarchy.clients.length > 0) && <DropdownMenuItem disabled={demoPending} onClick={() => void prepareDemo()}><Database/><span>Initialize role demo</span></DropdownMenuItem>}
           {(hierarchy.platform || hierarchy.clients.length > 0) && <DropdownMenuItem disabled={demoPending} onClick={() => setResetOpen(true)}><RotateCcw/><span className="min-w-0 flex-1"><span className="block">Reset demo data</span><span className="block text-xs text-muted-foreground">Rebuild marked disposable records</span></span></DropdownMenuItem>}
         </DropdownMenuGroup><DropdownMenuSeparator/></>}
         <DropdownMenuGroup><DropdownMenuItem render={<Link href="/profile"/>}><Users/>{t("account.profile")}</DropdownMenuItem><DropdownMenuItem render={<Link href={currentUser.role === "Client Administrator" ? "/dashboard?view=administration" : "/settings"}/>}><Settings/>{currentUser.role === "Client Administrator" ? "Administration" : "Settings"}</DropdownMenuItem><DropdownMenuItem onClick={() => setPreferencesOpen(true)}><Palette/>{t("account.appearance")}</DropdownMenuItem></DropdownMenuGroup>

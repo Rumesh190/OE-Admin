@@ -4,6 +4,7 @@ import { getAccessV3State } from "@/features/five-s/administration/access-v3-sta
 import { getAccessV4State } from "@/features/five-s/administration/access-v4-state";
 import { getAdminUsers } from "@/features/five-s/administration/store";
 import { getAllOrganizationConfiguration } from "@/lib/organization-store";
+import { resolveFactoryPerson } from "@/features/five-s/administration/factory-authorization";
 import { getOrganizations } from "@/lib/organizations";
 
 export type CanonicalProfileTarget =
@@ -43,15 +44,16 @@ function ordered(values: Iterable<string>) {
 function factoryProfile(personId: string, organizationId: string, plantId: string): CanonicalProfile | null {
   const person = getAdminUsers().find(item => item.id === personId && item.status === "Active");
   if (!person) return null;
-  const access = getAccessV3State();
-  const membership = access.factoryMemberships.find(item => item.userId === personId && item.organizationId === organizationId && item.plantId === plantId && item.status === "Active");
+  const resolved = resolveFactoryPerson(personId, { organizationId, plantId });
+  if (!resolved.valid) return null;
+  const membership = resolved.membership;
   const roles: string[] = [];
-  if (access.factoryAdmins.some(item => item.userId === personId && item.organizationId === organizationId && item.plantId === plantId && item.status === "Active")) roles.push("Factory Administrator");
+  if (resolved.factoryAdmin) roles.push("Factory Administrator");
   for (const assignment of getAccessV4State().assignments.filter(item => item.personId === personId && item.organizationId === organizationId && item.plantId === plantId && item.status === "Active")) roles.push(assignment.role);
   if (membership?.baseRole === "Zone Leader") roles.push("Zone Leader");
   else if (membership?.baseRole === "Zone Member") roles.push("Zone Member");
   else if (membership) roles.push("Standard User");
-  if (access.auditorGrants.some(item => item.userId === personId && item.organizationId === organizationId && item.plantId === plantId && item.status === "Active")) roles.push("Auditor");
+  if (resolved.grantEffective) roles.push("Auditor");
   const responsibilities = ordered(roles);
   if (!responsibilities.length) return null;
   return { personId, name: person.name, primaryRole: responsibilities[0], responsibilities };
@@ -88,21 +90,35 @@ export function getCanonicalProfileHierarchy() {
   return { platform, clients };
 }
 
-export function resolveCanonicalProfileRole(personId: string, target?: CanonicalProfileTarget | null) {
-  if (personId === "USR-OPS-SUPER-ADMIN") return "Platform Super Admin";
+/** One presentation projection; roles never create memberships or authorization. */
+export function resolveCanonicalProfile(personId: string, target?: CanonicalProfileTarget | null): CanonicalProfile | null {
+  const person = getAdminUsers().find(item => item.id === personId && item.status === "Active");
+  if (!person) return null;
+  if (personId === "USR-OPS-SUPER-ADMIN") return { personId, name: person.name, primaryRole: "Platform Super Admin", responsibilities: ["Platform Super Admin"] };
   const hierarchy = getCanonicalProfileHierarchy();
-  if (target?.kind === "client") return hierarchy.clients.find(item => item.id === target.organizationId)?.administrator?.personId === personId ? "Client Administrator" : "Standard User";
+  if (target?.kind === "client") {
+    const administrator = hierarchy.clients.find(item => item.id === target.organizationId)?.administrator;
+    return administrator?.personId === personId ? administrator : null;
+  }
   if (target?.kind === "factory") {
     const client = hierarchy.clients.find(item => item.id === target.organizationId);
-    if (client?.administrator?.personId === personId) return "Client Administrator";
-    return client?.factories.find(item => item.id === target.plantId)?.users.find(item => item.personId === personId)?.primaryRole ?? "Standard User";
+    if (client?.administrator?.personId === personId) return client.administrator;
+    const profile = client?.factories.find(item => item.id === target.plantId)?.users.find(item => item.personId === personId);
+    if (profile) return profile;
   }
-  for (const client of hierarchy.clients) {
-    if (client.administrator?.personId === personId) return "Client Administrator";
-    for (const factory of client.factories) {
-      const profile = factory.users.find(item => item.personId === personId);
-      if (profile) return profile.primaryRole;
-    }
+  // Legacy ABC seeds have role/Zone fields, not canonical factory assignments.
+  // Never use them to revive inactive/revoked canonical authority or a foreign scope.
+  const access = getAccessV3State();
+  const scopedIdentity = person.accessModel === "v3" || access.clientMemberships.some(item => item.userId === personId)
+    || access.factoryMemberships.some(item => item.userId === personId) || access.factoryAdmins.some(item => item.userId === personId);
+  const legacyScope = !target || (target.kind === "factory" && target.organizationId === "abc-manufacturing" && target.plantId === "PLANT-EGM");
+  if (!scopedIdentity && legacyScope) {
+    const responsibilities = ordered(person.roles);
+    return { personId, name: person.name, primaryRole: responsibilities[0] ?? "Standard User", responsibilities };
   }
-  return "Standard User";
+  return null;
+}
+
+export function resolveCanonicalProfileRole(personId: string, target?: CanonicalProfileTarget | null) {
+  return resolveCanonicalProfile(personId, target)?.primaryRole ?? "Standard User";
 }

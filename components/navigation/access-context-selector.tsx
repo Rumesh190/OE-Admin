@@ -46,9 +46,8 @@ export function AccessContextSelector() {
   const isClientAdmin = access.clientMemberships.some(
     (membership) => membership.userId === current.id && membership.status === "Active" && membership.clientAdmin,
   );
-  if (!current.isSuperAdmin && !isClientAdmin) return null;
-
   const options = authorizedContextOptions();
+  if (!current.isSuperAdmin && !isClientAdmin && options.filter(option => option.kind === "factory").length < 2) return null;
   const platform = options.find((option) => option.kind === "platform");
   const organizations = getOrganizations().filter((organization) => organization.status === "Active");
   const plants = getAllOrganizationConfiguration().plants;

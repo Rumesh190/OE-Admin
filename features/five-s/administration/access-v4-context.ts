@@ -50,6 +50,18 @@ export function getActiveAccessContext(): AccessContext | null {
   if (!raw) return null;
   return validateAccessContext(JSON.parse(raw));
 }
+/** Restore only an unambiguous scope for the already authenticated identity. Never change people or repair saved selections. */
+export function initializeCurrentAccessContext() {
+  const selected = getActiveAccessContext(); // Invalid saved selections fail closed and remain intact.
+  if (selected) return selected;
+  const options = authorizedContextOptions();
+  const administrative = options.filter(option => option.kind === "platform" || option.kind === "client");
+  const factories = options.filter(option => option.kind === "factory");
+  const initial = administrative.length === 1 ? administrative[0] : administrative.length === 0 && factories.length === 1 ? factories[0] : null;
+  if (!initial) return null;
+  selectAccessContext(initial);
+  return getActiveAccessContext();
+}
 export function requireAccessContext(expectedSelectionId: string, scope: { organizationId: string; plantId?: string }, kind: AccessContext["kind"]) {
   const c = getActiveAccessContext();
   if (!c || c.selectionId !== expectedSelectionId || c.kind !== kind || (kind !== "platform" && (c.organizationId !== scope.organizationId || (kind === "factory" && c.plantId !== scope.plantId)))) throw new Error("Access context changed or does not match this operation. Reopen the form.");

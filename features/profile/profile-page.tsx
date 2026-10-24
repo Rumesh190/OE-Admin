@@ -65,7 +65,7 @@ function same(left: unknown, right: unknown) {
 export function ProfileSettingsPage({ initialTab = "profile" }: { initialTab?: ProfileTab }) {
   const [activeTab, setActiveTab] = React.useState<ProfileTab>(initialTab);
   const currentUser = useCurrentUser();
-  const users = useAdminUsers();
+  const users = useAdminUsers(true);
   const adminUser = users.find((user) => user.id === currentUser.id);
   const personal = usePersonalSettings(currentUser.id);
 
@@ -132,8 +132,8 @@ function ProfilePanel({ currentUser, adminUser, stored }: {
       : { tone: "error", message: result.message });
   }
 
-  const zone = adminUser?.zoneMemberships[0]?.zone ?? currentUser.primaryZone;
-  const role = adminUser?.roles.join(", ") || currentUser.role;
+  const zone = currentUser.primaryZone || "Not assigned";
+  const role = currentUser.role;
   return <div className="grid gap-6 pt-3 lg:grid-cols-[minmax(0,1fr)_minmax(300px,.62fr)]">
     <section aria-labelledby="profile-information-heading" className="overflow-hidden rounded-xl border bg-card">
       <div className="flex flex-col gap-4 border-b p-4 sm:flex-row sm:items-center sm:p-5">
@@ -169,6 +169,7 @@ function ProfilePanel({ currentUser, adminUser, stored }: {
       <div className="border-b p-4 sm:p-5"><h2 id="organization-information-heading" className="font-semibold">Organization information</h2><p className="mt-1 text-xs text-muted-foreground">Managed by your organization administrator.</p></div>
       <div className="grid gap-4 p-4 sm:grid-cols-2 sm:p-5 lg:grid-cols-1 xl:grid-cols-2">
         <ReadOnlyField label="Role" value={role} />
+        <ReadOnlyField label="Responsibilities" value={currentUser.responsibilities.join(", ") || role} />
         <ReadOnlyField label="Plant" value={currentUser.plant} />
         <ReadOnlyField label="Zone" value={zone} />
         <ReadOnlyField label="Account Status" value={adminUser?.status ?? "Active"} status />

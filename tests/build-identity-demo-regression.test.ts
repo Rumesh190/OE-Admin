@@ -45,7 +45,7 @@ it("builds the nested native persona hierarchy with distinct client administrato
   const s = await setup(); vi.stubEnv("NODE_ENV", "development");
   const foreign = { personId: "FOREIGN-PERSON", organizationId: "FOREIGN-CLIENT", name: "Retained", role: "Client Administrator" };
   s.storage.setItem("ops-final-role-demo-v1", JSON.stringify({ personas: [foreign] }));
-  const native = await import("@/lib/demo/native-demo-data"); await native.initializeNativeRoleDemo();
+  const native = await import("@/lib/demo/native-demo-data"); await native.resetNativeRoleDemo();
   const manifest = JSON.parse(s.storage.getItem("ops-final-role-demo-v1") ?? "{}");
   expect(manifest.personas).toContainEqual(foreign);
   expect(manifest.personas.every((p: { personId?: string }) => typeof p.personId === "string")).toBe(true);

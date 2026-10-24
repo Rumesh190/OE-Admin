@@ -2,8 +2,11 @@
 
 import { useSyncExternalStore } from "react";
 import { getAdminUser, useAdminUsers } from "@/features/five-s/administration/store";
+import { useAccessV3State } from "@/features/five-s/administration/access-v3-state";
+import { useAccessV4State } from "@/features/five-s/administration/access-v4-state";
+import { getAllOrganizationConfiguration, useOrganizationConfiguration } from "@/lib/organization-store";
 import { usePersonalSettings } from "@/lib/profile-settings";
-import { resolveCanonicalProfileRole, type CanonicalProfileTarget } from "@/lib/demo/canonical-profiles";
+import { resolveCanonicalProfileRole, resolveCanonicalProfile, type CanonicalProfileTarget } from "@/lib/demo/canonical-profiles";
 
 export interface DemoUser {
   id: string;
@@ -81,11 +84,14 @@ function subscribe(listener: () => void) {
   return () => { listeners.delete(listener); window.removeEventListener("ops-access-context-changed", listener); };
 }
 
-function selectedTarget(): CanonicalProfileTarget | null {
+function selectedTarget(personId: string): CanonicalProfileTarget | null {
   if (typeof window === "undefined") return null;
   try {
-    const value = JSON.parse(window.localStorage.getItem("ops-active-access-context-v1") ?? "null") as CanonicalProfileTarget | null;
-    return value?.kind === "platform" || value?.kind === "client" || value?.kind === "factory" ? value : null;
+    const value = JSON.parse(window.localStorage.getItem("ops-active-access-context-v1") ?? "null") as (CanonicalProfileTarget & { personId?: string }) | null;
+    if (value?.personId !== personId) return null;
+    if (value.kind === "platform") return value;
+    if (value.kind === "client" && typeof value.organizationId === "string") return value;
+    return value.kind === "factory" && typeof value.organizationId === "string" && typeof value.plantId === "string" ? value : null;
   } catch { return null; }
 }
 
@@ -94,14 +100,14 @@ function getSnapshot(): DemoUser {
   const selected = typeof window !== "undefined" ? window.localStorage.getItem(ADMIN_DEMO_SUBJECT_KEY) : null;
   if (selected) {
     const person = getAdminUser(selected);
-    const role = resolveCanonicalProfileRole(selected, selectedTarget());
+    const role = resolveCanonicalProfileRole(selected, selectedTarget(selected));
     const key = JSON.stringify([selected, person?.name, person?.status, role]);
     if (!administrationIdentity || key !== administrationIdentityKey) { administrationIdentityKey = key; administrationIdentity = { id: selected, name: person?.name ?? "Unavailable administration identity", role, initials: "AD", plant: person?.plant ?? "", primaryZone: "", isSuperAdmin: false }; }
     return administrationIdentity;
   }
   const identity = DEMO_USERS[activeRole];
   const person = getAdminUser(identity.id);
-  const role = resolveCanonicalProfileRole(identity.id, selectedTarget());
+  const role = resolveCanonicalProfileRole(identity.id, selectedTarget(identity.id));
   const key = JSON.stringify([identity.id, person?.name ?? identity.name, role]);
   if (!administrationIdentity || key !== administrationIdentityKey) { administrationIdentityKey = key; administrationIdentity = { ...identity, name: person?.name ?? identity.name, role }; }
   return administrationIdentity;
@@ -127,15 +133,25 @@ export function getCurrentDemoUser() {
 
 export function useCurrentUser() {
   const identity = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+  const access = useAccessV3State();
+  const independent = useAccessV4State();
+  const configuration = useOrganizationConfiguration();
   const configured = useAdminUsers(true).find((user) => user.id === identity.id);
   const personal = usePersonalSettings(identity.id);
+  const target = selectedTarget(identity.id);
+  const profile = resolveCanonicalProfile(identity.id, target);
+  const factory = target?.kind === "factory" && profile ? getAllOrganizationConfiguration().plants.find(item => item.id === target.plantId && (item.organizationId ?? "abc-manufacturing") === target.organizationId) : undefined;
+  const zoneId = factory ? access.zoneAllocations.find(item => item.userId === identity.id && item.status === "Active" && item.plantId === factory.id && item.organizationId === (factory.organizationId ?? "abc-manufacturing"))?.zoneId
+    ?? independent.assignments.find(item => item.personId === identity.id && item.status === "Active" && item.plantId === factory.id && item.organizationId === (factory.organizationId ?? "abc-manufacturing"))?.zoneId : undefined;
+  const zone = zoneId ? configuration.zones.find(item => item.id === zoneId && item.plantId === factory?.id && item.status === "Active") : undefined;
   const name = personal.profile.fullName || configured?.name || identity.name;
   return {
     ...identity,
     name,
     initials: name.split(/\s+/).filter(Boolean).map((part: string) => part[0]).join("").slice(0, 2).toUpperCase() || identity.initials,
-    plant: configured?.plant ?? identity.plant,
-    primaryZone: configured?.zoneMemberships[0]?.zone ?? identity.primaryZone,
+    responsibilities: profile?.responsibilities ?? [],
+    plant: factory?.name ?? configured?.plant ?? identity.plant,
+    primaryZone: factory ? zone?.name ?? "" : configured?.zoneMemberships[0]?.zone ?? identity.primaryZone,
     photo: personal.profile.photo,
   };
 }
